@@ -110,13 +110,28 @@
 ## Usage
 
 ```bash
-./robin -m gpt4o -q "dark web financial fraud" -t 12 -o output
-```
+usage: robin [-h] [--model {gpt4o,claude-3-5-sonnet-latest,llama3.1}] --query QUERY [--threads THREADS]
+               [--output OUTPUT]
 
-- `-m`, `--model`: LLM model (e.g., `gpt4o`, `claude`, `ollama`)
-- `-q`, `--query`: Dark web search query
-- `-t`, `--threads`: No. of threads to scrape URLs (Default: 5)
-- `-o`, `--output`: Path to output summary file (Default: date_time.md)
+Robin: AI-Powered Dark Web OSINT Tool
+
+options:
+  -h, --help            show this help message and exit
+  --model {gpt4o,claude-3-5-sonnet-latest,llama3.1}, -m {gpt4o,claude-3-5-sonnet-latest,llama3.1}
+                        Select LLM model (e.g., gpt4o, claude sonnet 3.5, ollama models)
+  --query QUERY, -q QUERY
+                        Dark web search query
+  --threads THREADS, -t THREADS
+                        Number of threads to use for scraping (Default: 5)
+  --output OUTPUT, -o OUTPUT
+                        Filename to save the final intelligence summary. If not provided, a filename based on the
+                        current date and time is used.
+
+Example commands:
+ - robin -m gpt4o -q "ransomware payments" -t 12
+ - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename
+ - robin -m llama3.1 -q "zero days"
+```
 
 ---
 
