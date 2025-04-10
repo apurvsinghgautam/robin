@@ -6,7 +6,7 @@
 
    <a href="#installation">Installation</a> &bull; <a href="#usage">Usage</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br>
 </div>
----
+
 [![asciicast](https://asciinema.org/a/RXHvSkTfEktd1VrVyEIRPgxY2.svg)](https://asciinema.org/a/RXHvSkTfEktd1VrVyEIRPgxY2)
 ---
 
