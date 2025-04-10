@@ -1,1 +1,141 @@
-# robin
+<div align="center">
+  <img src="img.png" alt="Logo" width="300">
+  <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
+</div>
+
+**Robin** is a AI-powered CLI-based tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries and filter search results from dark web search engines and provide investigation summary.
+
+---
+
+## Quickstart
+
+1. Download the Linux binary from Releases
+
+2. Run the tool
+   ```bash
+   robin -m gpt4o -q "ransomware payments"
+   ```
+
+---
+
+## Installation
+
+### From Source
+
+1. **Clone the Repository:**
+
+   ```bash
+   git clone https://github.com/apurvsinghgautam/robin.git
+   cd robin
+   ```
+
+2. **Set Up a Virtual Environment:**
+
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # or venv\Scripts\activate on Windows
+   ```
+
+3. **Install Dependencies:**
+
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+
+4. **Environment Variables:**
+
+   ```dotenv
+   OPENAI_API_KEY=your_secret_openai_key
+   ```
+
+5. **Run the tool:**
+   
+   ```bash
+   python main.py -m gpt4o -q "ransomware payments" -t 12
+   ```
+
+### Building a Binary with PyInstaller
+
+1. **Install PyInstaller:**
+
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. **Build the Binary:**
+
+   ```bash
+   pyinstaller --onefile --strip --noupx --name robin main.py
+   ```
+
+3. **Run the tool:**
+
+   ```bash
+   robin -m gpt4o -q "ransomware payments"
+   ```
+
+### Docker Image
+
+1. **Build the Docker Image:**
+
+   ```bash
+   docker build -t robin .
+   ```
+
+2. **Run the Container:**
+
+   ```bash
+   mkdir -p output
+   docker run --rm \
+     -v "$(pwd)/.env:/app/.env" \
+     -v "$(pwd)/output:/app/output" \
+     -e OPENAI_API_KEY="your_secret_key" \
+     robin --model gpt4o --query "dark web financial fraud" --output results
+   ```
+
+---
+
+## Usage
+
+```bash
+./robin -m gpt4o -q "dark web financial fraud" -r 15 -o output/results
+```
+
+- `-m`, `--model`: LLM model (e.g., `gpt4o`, `claude`, `ollama`)
+- `-q`, `--query`: Dark web search query
+- `-t`, `--threads`: No. of threads to scrape URLs (Default: 5)
+- `-o`, `--output`: Path to output summary file (Default: date_time.md)
+
+---
+
+## Contributing
+
+1. **Fork** the repo
+2. **Clone** your fork:
+
+   ```bash
+   git clone https://github.com/apurvsinghgautam/robin.git
+   cd robin
+   ```
+
+3. **Create a branch:**
+
+   ```bash
+   git checkout -b feature/your-feature
+   ```
+
+4. **Push and Open PR:**
+
+   ```bash
+   git push origin feature/your-feature
+   ```
+
+---
+
+## Acknowledgements
+
+- 
+-
+-
+-
