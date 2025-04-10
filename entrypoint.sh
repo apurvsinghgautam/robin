@@ -4,4 +4,4 @@ tor &
 sleep 15
 
 echo "Starting Robin: AI-Powered Dark Web OSINT Tool..."
-robin "$@"
+/app/robin "$@"
