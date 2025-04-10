@@ -6,6 +6,7 @@
 
    <a href="#installation">Installation</a> &bull; <a href="#usage">Usage</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br>
 </div>
+---
 
 ![Demo](media/screen.png)
 
