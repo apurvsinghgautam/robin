@@ -1,0 +1,9 @@
+bs4
+yaspin
+pysocks
+requests
+python-dotenv
+langchain-openai
+langchain-ollama
+langchain-anthropic
+langchain_community
