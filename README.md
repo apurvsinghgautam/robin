@@ -110,7 +110,7 @@
 ## Usage
 
 ```bash
-./robin -m gpt4o -q "dark web financial fraud" -r 15 -o output/results
+./robin -m gpt4o -q "dark web financial fraud" -t 12 -o output
 ```
 
 - `-m`, `--model`: LLM model (e.g., `gpt4o`, `claude`, `ollama`)
@@ -136,4 +136,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - Idea inspiration from [Thomas Roccia](https://x.com/fr0gger_) and his demo of [Perplexity of the Dark Web](https://x.com/fr0gger_/status/1908051083068645558).
 - Tools inspiration from my [OSINT Tools for the Dark Web](https://github.com/apurvsinghgautam/dark-web-osint-tools) repository.
-- LLm Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
+- LLM Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
