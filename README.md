@@ -2,10 +2,12 @@
   <img src="logo.png" alt="Logo" width="300">
   <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
-**Robin** is an AI-powered CLI-based tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries and filter search results from dark web search engines and provide investigation summary.
+   <p>**Robin** is an AI-powered CLI-based tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries and filter search results from dark web search engines and provide investigation summary.</p><br>
+
+   <a href="#installation">Installation</a> &bull; <a href="#usage">Usage</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br>
 </div>
 
-
+---
 
 ## Features
 
@@ -15,17 +17,6 @@
 - Optional Docker deployment for clean, isolated usage.
 - Save output summaries to file or use in pipeline workflows.
 - Designed for extensibility and integration with other OSINT tools.
-
----
-
-## Quickstart
-
-1. Download the Linux binary from Releases
-
-2. Run the tool
-   ```bash
-   robin -m gpt4o -q "ransomware payments"
-   ```
 
 ---
 
@@ -144,6 +135,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 * Commit your changes (git commit -m 'Add some amazing feature')
 * Push to the branch (git push origin feature/amazing-feature)
 * Open a Pull Request
+
+Open an Issue for any of these situations:
+* If you spot a bug or bad code
+* If you have questions or about doubts about usage
 
 ---
 
