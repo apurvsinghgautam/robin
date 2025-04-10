@@ -120,25 +120,13 @@
 
 ## Contributing
 
-1. **Fork** the repo
-2. **Clone** your fork:
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-   ```bash
-   git clone https://github.com/apurvsinghgautam/robin.git
-   cd robin
-   ```
-
-3. **Create a branch:**
-
-   ```bash
-   git checkout -b feature/your-feature
-   ```
-
-4. **Push and Open PR:**
-
-   ```bash
-   git push origin feature/your-feature
-   ```
+* Fork the repository
+* Create your feature branch (git checkout -b feature/amazing-feature)
+* Commit your changes (git commit -m 'Add some amazing feature')
+* Push to the branch (git push origin feature/amazing-feature)
+* Open a Pull Request
 
 ---
 
