@@ -2,7 +2,7 @@
   <img src="logo.png" alt="Logo" width="300">
   <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
-   <p>**Robin** is an AI-powered CLI-based tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries and filter search results from dark web search engines and provide investigation summary.</p><br>
+   <p>Robin is an AI-powered CLI-based tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries and filter search results from dark web search engines and provide investigation summary.</p><br>
 
    <a href="#installation">Installation</a> &bull; <a href="#usage">Usage</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br>
 </div>
