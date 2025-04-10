@@ -11,12 +11,12 @@
 
 ## Features
 
-- Modular architecture with clearly separated components for search, scrape, and LLM processing.
-- Supports multiple LLM providers (OpenAI, Claude, Ollama) via pluggable model interface.
-- CLI-first experience for automation and power users.
-- Optional Docker deployment for clean, isolated usage.
-- Save output summaries to file or use in pipeline workflows.
-- Designed for extensibility and integration with other OSINT tools.
+- ⚙️ **Modular Architecture** – Clean separation between search, scrape, and LLM workflows.
+- 🤖 **Multi-Model Support** – Easily switch between OpenAI, Claude, or local models like Ollama.
+- 💻 **CLI-First Design** – Built for terminal warriors and automation ninjas.
+- 🐳 **Docker-Ready** – Optional Docker deployment for clean, isolated usage.
+- 📝 **Custom Reporting** – Save investigation output to file for reporting or further analysis.
+- 🧩 **Extensible** – Easy to plug in new search engines, models, or output formats.
 
 ---
 
