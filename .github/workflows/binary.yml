@@ -54,6 +54,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   build:
+    needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
