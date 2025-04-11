@@ -80,11 +80,11 @@ jobs:
         
       - name: Archive Binary
         run: |
-          cp dist/robin ..
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            zip robin-macos.zip robin LICENSE README.md
+            cd dist/
+            zip robin-macos.zip robin ./LICENSE ./README.md
           else
-            zip robin-linux.zip robin LICENSE README.md
+            zip robin-linux.zip robin ./LICENSE ./README.md
           fi
 
       - name: Upload Release Asset
