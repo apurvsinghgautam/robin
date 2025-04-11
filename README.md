@@ -24,77 +24,39 @@
 
 ## Installation
 
-### From Source
+### Release Binary (Recommended)
 
-1. **Clone the Repository:**
+- Download the appropriate binary for your system from the [latest release](https://github.com/apurvsinghgautam/robin/releases/latest)
+- Unzip the file, make the binary executable (Linux/macOS) with `chmod +x robin`, and run as
 
-   ```bash
-   git clone https://github.com/apurvsinghgautam/robin.git
-   cd robin
-   ```
+```bash
+robin -m gpt4o -q "ransomware payments"
+```
 
-2. **Set Up a Virtual Environment:**
+### Using Python (Development Version)
 
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # or venv\Scripts\activate on Windows
-   ```
+- With `Python 3.10+` installed, run the following:
 
-3. **Install Dependencies:**
-
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-
-4. **Environment Variables:**
-
-   ```dotenv
-   OPENAI_API_KEY=your_secret_openai_key
-   ```
-
-5. **Run the tool:**
-   
-   ```bash
-   python main.py -m gpt4o -q "ransomware payments" -t 12
-   ```
-
-### Building a Binary with PyInstaller
-
-1. **Install PyInstaller:**
-
-   ```bash
-   pip install pyinstaller
-   ```
-
-2. **Build the Binary:**
-
-   ```bash
-   pyinstaller --onefile --strip --noupx --name robin main.py
-   ```
-
-3. **Run the tool:**
-
-   ```bash
-   robin -m gpt4o -q "ransomware payments"
-   ```
+```bash
+pip install -r requirements.txt
+python main.py -m gpt4o -q "ransomware payments" -t 12
+```
 
 ### Docker Image
 
-1. **Build the Docker Image:**
+- Build the Docker Image:
 
    ```bash
    docker build -t robin .
    ```
 
-2. **Run the Container:**
+- Run the Container:
 
    ```bash
    mkdir -p output
    docker run --rm \
      -v "$(pwd)/.env:/app/.env" \
      -v "$(pwd)/output:/app/output" \
-     -e OPENAI_API_KEY="your_secret_key" \
      robin --model gpt4o --query "dark web financial fraud" --output results
    ```
 
@@ -103,9 +65,6 @@
 ## Usage
 
 ```bash
-usage: robin [-h] [--model {gpt4o,claude-3-5-sonnet-latest,llama3.1}] --query QUERY [--threads THREADS]
-               [--output OUTPUT]
-
 Robin: AI-Powered Dark Web OSINT Tool
 
 options:
@@ -132,15 +91,15 @@ Example commands:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-* Fork the repository
-* Create your feature branch (git checkout -b feature/amazing-feature)
-* Commit your changes (git commit -m 'Add some amazing feature')
-* Push to the branch (git push origin feature/amazing-feature)
-* Open a Pull Request
+- Fork the repository
+- Create your feature branch (git checkout -b feature/amazing-feature)
+- Commit your changes (git commit -m 'Add some amazing feature')
+- Push to the branch (git push origin feature/amazing-feature)
+- Open a Pull Request
 
 Open an Issue for any of these situations:
-* If you spot a bug or bad code
-* If you have questions or about doubts about usage
+- If you spot a bug or bad code
+- If you have questions or about doubts about usage
 
 ---
 
