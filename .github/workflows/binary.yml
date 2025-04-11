@@ -58,7 +58,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-22.04, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -76,12 +76,25 @@ jobs:
       - name: Build Binary
         run: |
           pyinstaller --onefile --hidden-import=pydantic --hidden-import=pydantic-core --hidden-import=pydantic.deprecated.decorator --strip --noupx --name robin main.py
-          zip robin-${{ matrix.os }}.zip dist/robin LICENSE README.md
+          
+        
+      - name: Archive Binary
+        run: |
+          cp dist/robin ..
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            zip robin-macos.zip robin LICENSE README.md
+          else
+            zip robin-linux.zip robin LICENSE README.md
+          fi
 
       - name: Upload Release Asset
         run: |
-          gh release upload "${{ needs.create-release.outputs.version }}" \
-            "robin-${{ matrix.os }}.zip" --clobber
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            gh release upload "${{ needs.create-release.outputs.version }}" \
+              "robin-macos.zip" --clobber
+          else
+            gh release upload "${{ needs.create-release.outputs.version }}" \
+              "robin-linux.zip" --clobber
         env:
           GH_TOKEN: ${{ github.token }}
 
