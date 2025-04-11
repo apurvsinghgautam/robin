@@ -80,11 +80,11 @@ jobs:
         
       - name: Archive Binary
         run: |
+          cd dist/
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            cd dist/
-            zip robin-macos.zip robin ./LICENSE ./README.md
+            zip robin-macos.zip robin ../LICENSE ../README.md
           else
-            zip robin-linux.zip robin ./LICENSE ./README.md
+            zip robin-linux.zip robin ../LICENSE ../README.md
           fi
 
       - name: Upload Release Asset
@@ -95,6 +95,7 @@ jobs:
           else
             gh release upload "${{ needs.create-release.outputs.version }}" \
               "robin-linux.zip" --clobber
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
 
