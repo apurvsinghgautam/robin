@@ -89,6 +89,7 @@ jobs:
 
       - name: Upload Release Asset
         run: |
+          cd dist/
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             gh release upload "${{ needs.create-release.outputs.version }}" \
               "robin-macos.zip" --clobber
