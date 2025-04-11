@@ -46,19 +46,19 @@ python main.py -m gpt4o -q "ransomware payments" -t 12
 
 - Build the Docker Image:
 
-   ```bash
-   docker build -t robin .
-   ```
+```bash
+docker build -t robin .
+```
 
 - Run the Container:
 
-   ```bash
-   mkdir -p output
-   docker run --rm \
-     -v "$(pwd)/.env:/app/.env" \
-     -v "$(pwd)/output:/app/output" \
-     robin --model gpt4o --query "dark web financial fraud" --output results
-   ```
+```bash
+mkdir -p output
+docker run --rm \
+   -v "$(pwd)/.env:/app/.env" \
+   -v "$(pwd)/output:/app/output" \
+   robin --model gpt4o --query "dark web financial fraud" --output results
+```
 
 ---
 
