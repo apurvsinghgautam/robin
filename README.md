@@ -1,9 +1,9 @@
 <div align="center">
-  <img src=".github/assets/logo.png" alt="Logo" width="300">
-  <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
+   <img src=".github/assets/logo.png" alt="Logo" width="300">
+   <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
    <p>Robin is an AI-powered CLI-based tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries, filter search results from dark web search engines, and provide an investigation summary.</p><br>
-
+   <a href="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml"><img alt="Build" src="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml/badge.svg"></a> <a href="https://github.com/apurvsinghgautam/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a><br><br>
    <a href="#installation">Installation</a> &bull; <a href="#usage">Usage</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br>
 </div>
 
