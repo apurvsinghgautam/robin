@@ -23,11 +23,13 @@
 ---
 
 ## Installation
+> [!NOTE]
+> The tool needs Tor to do the searches. You can install Tor using `apt install tor` on Linux/Windows(WSL) or `brew install tor` on Mac. Once installed, confirm if Tor is running in the background.
 
 ### Release Binary (Recommended)
 
 - Download the appropriate binary for your system from the [latest release](https://github.com/apurvsinghgautam/robin/releases/latest)
-- Unzip the file, make the binary executable (Linux/macOS) with `chmod +x robin`, and run as
+- Unzip the file, make the binary executable with `chmod +x robin`, and run as
 
 ```bash
 robin -m gpt4o -q "ransomware payments"
