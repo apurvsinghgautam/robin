@@ -44,6 +44,9 @@ pip install -r requirements.txt
 python main.py -m gpt4o -q "ransomware payments" -t 12
 ```
 
+> [!TIP]
+> You can provide OpenAI or Anthropic key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH
+
 ### Docker Image
 
 - Build the Docker Image:
