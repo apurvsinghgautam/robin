@@ -32,7 +32,7 @@
 - Unzip the file, make the binary executable with `chmod +x robin`, and run as
 
 ```bash
-robin -m gpt4o -q "ransomware payments"
+robin -m gpt-4.1 -q "ransomware payments"
 ```
 
 ### Using Python (Development Version)
@@ -41,7 +41,7 @@ robin -m gpt4o -q "ransomware payments"
 
 ```bash
 pip install -r requirements.txt
-python main.py -m gpt4o -q "ransomware payments" -t 12
+python main.py -m gpt-4.1 -q "ransomware payments" -t 12
 ```
 
 > [!TIP]
@@ -74,7 +74,7 @@ Robin: AI-Powered Dark Web OSINT Tool
 
 options:
   -h, --help            show this help message and exit
-  --model {gpt4o,claude-3-5-sonnet-latest,llama3.1}, -m {gpt4o,claude-3-5-sonnet-latest,llama3.1}
+  --model {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1}, -m {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1}
                         Select LLM model (e.g., gpt4o, claude sonnet 3.5, ollama models)
   --query QUERY, -q QUERY
                         Dark web search query

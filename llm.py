@@ -28,10 +28,13 @@ class BufferedStreamingHandler(BaseCallbackHandler):
 
 def get_llm(model_choice):
     model_choice_lower = model_choice.lower()
-    if model_choice_lower in ['gpt4o', 'gpt-4o', 'gpt4', 'openai']:
+    if model_choice_lower in ['gpt4o', 'gpt-4o', 'gpt4']:
         # GPT-4o from OpenAI
         return ChatOpenAI(model_name="gpt-4o", temperature=0, streaming=True, callbacks=[BufferedStreamingHandler(buffer_limit=60)])
-    elif model_choice_lower in ['claude sonnet 3.5', 'claude-sonnet-3.5', 'claude']:
+    elif model_choice_lower in ['gpt-4.1']:
+        # GPT-4o from OpenAI
+        return ChatOpenAI(model_name="gpt-4.1", temperature=0, streaming=True, callbacks=[BufferedStreamingHandler(buffer_limit=60)])
+    elif model_choice_lower in ['claude sonnet 3.5', 'claude-sonnet-3.5']:
         # Claude Sonnet 3.5 from Anthropic
         return ChatAnthropic(model="claude-3-5-sonnet-latest", temperature=0, streaming=True, callbacks=[BufferedStreamingHandler(buffer_limit=60)])
     elif model_choice_lower in ['ollama', 'lamma3.1', 'llama']:
