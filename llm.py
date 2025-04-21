@@ -6,6 +6,7 @@ from config import OPENAI_API_KEY, ANTHROPIC_API_KEY
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.output_parsers import StrOutputParser
+import openai
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -71,26 +72,51 @@ def filter_results(llm, query, results):
     Search Query: {query}
     Search Results:
     """
-
-    final_str = []
-    for i, res in enumerate(results):
-        link = re.sub(r'(?<=\.onion)(.*)', lambda m: re.sub(r'[^0-9a-zA-Z\-\.]', ' ', m.group(0)), res['link'])
-        title = re.sub(r'[^0-9a-zA-Z\-\.]', ' ' , res['title'])
-        if link == '' and title == '':
-            continue
-        final_str.append(f"{i+1}. {link} - {title}")
     
-    # Joining final string to be sent to LLM
-    final_str = "\n".join(s for s in final_str)
+    final_str = _generate_final_string(results)
 
     prompt_template = ChatPromptTemplate([("system", system_prompt), ("user", "{results}")])
     chain = prompt_template | llm | StrOutputParser()
-    result_indices = chain.invoke({"query": query, "results": final_str})
+    try:
+        result_indices = chain.invoke({"query": query, "results": final_str})
+    except openai.RateLimitError as e:
+        print(f"Rate limit error: {e} \n Truncating to Web titles only with 30 characters")
+        final_str = _generate_final_string(results, truncate=True)
+        result_indices = chain.invoke({"query": query, "results": final_str})
 
-    # Select top_k results.
-    top_results = [results[i] for i in [int(item.strip()) for item in result_indices.split(",")]]
+    # Select top_k results using original (non-truncated) results
+    top_results = [results[i-1] for i in [int(item.strip()) for item in result_indices.split(",")]]
 
     return top_results
+
+def _generate_final_string(results, truncate=False):
+    """
+    Generate a formatted string from the search results for LLM processing.
+    """
+
+    if truncate:
+        # Use only the first 35 characters of the title
+        max_title_length = 30
+        # Do not use link at all
+        max_link_length = 0
+
+    final_str = []
+    for i, res in enumerate(results):
+        # Truncate link at .onion for display
+        truncated_link = re.sub(r'(?<=\.onion).*', '', res['link'])
+        title = re.sub(r'[^0-9a-zA-Z\-\.]', ' ', res['title'])
+        if truncated_link == '' and title == '':
+            continue
+
+        if truncate:
+            # Truncate title to max_title_length characters
+            title = title[:max_title_length] + '...' if len(title) > max_title_length else title
+            # Truncate link to max_link_length characters
+            truncated_link = truncated_link[:max_link_length] + '...' if len(truncated_link) > max_link_length else truncated_link 
+
+        final_str.append(f"{i+1}. {truncated_link} - {title}")
+    
+    return "\n".join(s for s in final_str)
 
 def generate_summary(llm, query, content):
     system_prompt = """
