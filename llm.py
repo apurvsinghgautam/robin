@@ -1,48 +1,39 @@
 import re
-from langchain_openai import ChatOpenAI
-from langchain_ollama import ChatOllama
-from langchain_anthropic import ChatAnthropic
+import openai
 from config import OPENAI_API_KEY, ANTHROPIC_API_KEY
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.output_parsers import StrOutputParser
-import openai
+from llm_utils import _llm_config_map, _common_llm_params
 
 import warnings
 warnings.filterwarnings("ignore")
 
-class BufferedStreamingHandler(BaseCallbackHandler):
-    def __init__(self, buffer_limit: int = 60):
-        self.buffer = ""
-        self.buffer_limit = buffer_limit
-
-    def on_llm_new_token(self, token: str, **kwargs) -> None:
-        self.buffer += token
-        if "\n" in token or len(self.buffer) >= self.buffer_limit:
-            print(self.buffer, end="", flush=True)
-            self.buffer = ""
-
-    def on_llm_end(self, response, **kwargs) -> None:
-        if self.buffer:
-            print(self.buffer, end="", flush=True)
-            self.buffer = ""
-
 def get_llm(model_choice):
     model_choice_lower = model_choice.lower()
-    if model_choice_lower in ['gpt4o', 'gpt-4o', 'gpt4']:
-        # GPT-4o from OpenAI
-        return ChatOpenAI(model_name="gpt-4o", temperature=0, streaming=True, callbacks=[BufferedStreamingHandler(buffer_limit=60)])
-    elif model_choice_lower in ['gpt-4.1']:
-        # GPT-4o from OpenAI
-        return ChatOpenAI(model_name="gpt-4.1", temperature=0, streaming=True, callbacks=[BufferedStreamingHandler(buffer_limit=60)])
-    elif model_choice_lower in ['claude sonnet 3.5', 'claude-sonnet-3.5']:
-        # Claude Sonnet 3.5 from Anthropic
-        return ChatAnthropic(model="claude-3-5-sonnet-latest", temperature=0, streaming=True, callbacks=[BufferedStreamingHandler(buffer_limit=60)])
-    elif model_choice_lower in ['ollama', 'lamma3.1', 'llama']:
-        # Local model via Ollama; adjust the model parameter as needed.
-        return ChatOllama(model="llama3.1", temperature=0, streaming=True, callbacks=[BufferedStreamingHandler(buffer_limit=60)])
-    else:
-        raise ValueError("Unsupported LLM model")
+    # Look up the configuration in the map
+    config = _llm_config_map.get(model_choice_lower)
+
+    if config is None: # Extra error check
+        # Provide a helpful error message listing supported models
+        supported_models = list(_llm_config_map.keys())
+        raise ValueError(
+            f"Unsupported LLM model: '{model_choice}'. "
+            f"Supported models (case-insensitive match) are: {', '.join(supported_models)}"
+        )
+    
+    # Extract the necessary information from the configuration
+    llm_class = config['class']
+    model_specific_params = config['constructor_params']
+
+    # Combine common parameters with model-specific parameters
+    # Model-specific parameters will override common ones if there are any conflicts
+    all_params = {**_common_llm_params, **model_specific_params}
+
+    # Create the LLM instance using the gathered parameters
+    llm_instance = llm_class(**all_params)
+
+    return llm_instance
+
 
 def refine_query(llm, user_input):
     system_prompt = """

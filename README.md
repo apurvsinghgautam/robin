@@ -52,7 +52,7 @@ python main.py -m gpt-4.1 -q "ransomware payments" -t 12
 ```
 
 > [!TIP]
-> You can provide OpenAI or Anthropic key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH
+> You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH
 
 ### Docker Image
 
@@ -81,8 +81,8 @@ Robin: AI-Powered Dark Web OSINT Tool
 
 options:
   -h, --help            show this help message and exit
-  --model {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1}, -m {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1}
-                        Select LLM model (e.g., gpt4o, claude sonnet 3.5, ollama models)
+  --model {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}, -m {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}
+                        Select LLM model (e.g., gpt4o, claude sonnet 3.5, ollama models, gemini 2.5 flash)
   --query QUERY, -q QUERY
                         Dark web search query
   --threads THREADS, -t THREADS
@@ -95,6 +95,7 @@ Example commands:
  - robin -m gpt4o -q "ransomware payments" -t 12
  - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename
  - robin -m llama3.1 -q "zero days"
+ - robin -m gemini-2.5-flash -q "zero days"
 ```
 
 ---
