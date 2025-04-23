@@ -23,7 +23,7 @@ def main():
     parser.add_argument(
         "--model", '-m', 
         type=str, 
-        choices=["gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1"],
+        choices=["gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"],
         default="gpt4o",
         help="Select LLM model (e.g., gpt4o, claude sonnet 3.5, ollama models)"
     )
