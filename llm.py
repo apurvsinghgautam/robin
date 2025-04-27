@@ -6,24 +6,26 @@ from langchain_core.output_parsers import StrOutputParser
 from llm_utils import _llm_config_map, _common_llm_params
 
 import warnings
+
 warnings.filterwarnings("ignore")
+
 
 def get_llm(model_choice):
     model_choice_lower = model_choice.lower()
     # Look up the configuration in the map
     config = _llm_config_map.get(model_choice_lower)
 
-    if config is None: # Extra error check
+    if config is None:  # Extra error check
         # Provide a helpful error message listing supported models
         supported_models = list(_llm_config_map.keys())
         raise ValueError(
             f"Unsupported LLM model: '{model_choice}'. "
             f"Supported models (case-insensitive match) are: {', '.join(supported_models)}"
         )
-    
+
     # Extract the necessary information from the configuration
-    llm_class = config['class']
-    model_specific_params = config['constructor_params']
+    llm_class = config["class"]
+    model_specific_params = config["constructor_params"]
 
     # Combine common parameters with model-specific parameters
     # Model-specific parameters will override common ones if there are any conflicts
@@ -46,9 +48,12 @@ def refine_query(llm, user_input):
 
     INPUT:
     """
-    prompt_template = ChatPromptTemplate([("system", system_prompt), ("user", "{query}")])
+    prompt_template = ChatPromptTemplate(
+        [("system", system_prompt), ("user", "{query}")]
+    )
     chain = prompt_template | llm | StrOutputParser()
     return chain.invoke({"query": user_input})
+
 
 def filter_results(llm, query, results):
     if not results:
@@ -63,22 +68,30 @@ def filter_results(llm, query, results):
     Search Query: {query}
     Search Results:
     """
-    
+
     final_str = _generate_final_string(results)
 
-    prompt_template = ChatPromptTemplate([("system", system_prompt), ("user", "{results}")])
+    prompt_template = ChatPromptTemplate(
+        [("system", system_prompt), ("user", "{results}")]
+    )
     chain = prompt_template | llm | StrOutputParser()
     try:
         result_indices = chain.invoke({"query": query, "results": final_str})
     except openai.RateLimitError as e:
-        print(f"Rate limit error: {e} \n Truncating to Web titles only with 30 characters")
+        print(
+            f"Rate limit error: {e} \n Truncating to Web titles only with 30 characters"
+        )
         final_str = _generate_final_string(results, truncate=True)
         result_indices = chain.invoke({"query": query, "results": final_str})
 
     # Select top_k results using original (non-truncated) results
-    top_results = [results[i-1] for i in [int(item.strip()) for item in result_indices.split(",")]]
+    top_results = [
+        results[i - 1]
+        for i in [int(item.strip()) for item in result_indices.split(",")]
+    ]
 
     return top_results
+
 
 def _generate_final_string(results, truncate=False):
     """
@@ -94,20 +107,29 @@ def _generate_final_string(results, truncate=False):
     final_str = []
     for i, res in enumerate(results):
         # Truncate link at .onion for display
-        truncated_link = re.sub(r'(?<=\.onion).*', '', res['link'])
-        title = re.sub(r'[^0-9a-zA-Z\-\.]', ' ', res['title'])
-        if truncated_link == '' and title == '':
+        truncated_link = re.sub(r"(?<=\.onion).*", "", res["link"])
+        title = re.sub(r"[^0-9a-zA-Z\-\.]", " ", res["title"])
+        if truncated_link == "" and title == "":
             continue
 
         if truncate:
             # Truncate title to max_title_length characters
-            title = title[:max_title_length] + '...' if len(title) > max_title_length else title
+            title = (
+                title[:max_title_length] + "..."
+                if len(title) > max_title_length
+                else title
+            )
             # Truncate link to max_link_length characters
-            truncated_link = truncated_link[:max_link_length] + '...' if len(truncated_link) > max_link_length else truncated_link 
+            truncated_link = (
+                truncated_link[:max_link_length] + "..."
+                if len(truncated_link) > max_link_length
+                else truncated_link
+            )
 
         final_str.append(f"{i+1}. {truncated_link} - {title}")
-    
+
     return "\n".join(s for s in final_str)
+
 
 def generate_summary(llm, query, content):
     system_prompt = """
@@ -136,6 +158,8 @@ def generate_summary(llm, query, content):
 
     INPUT:
     """
-    prompt_template = ChatPromptTemplate([("system", system_prompt), ("user", "{content}")])
+    prompt_template = ChatPromptTemplate(
+        [("system", system_prompt), ("user", "{content}")]
+    )
     chain = prompt_template | llm | StrOutputParser()
     return chain.invoke({"query": query, "content": content})
