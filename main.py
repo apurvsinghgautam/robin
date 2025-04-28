@@ -10,7 +10,7 @@ from llm import get_llm, refine_query, filter_results, generate_summary
 @click.group()
 @click.version_option()
 def robin():
-    """Robin: Dark-Web OSINT Tool."""
+    """Robin: AI-Powered Dark Web OSINT Tool."""
     pass
 
 
@@ -41,7 +41,7 @@ def robin():
     help="Filename to save the final intelligence summary. If not provided, a filename based on the current date and time is used.",
 )
 def cli(model, query, threads, output):
-    """Run the Robin OSINT tool.\n
+    """Run Robin in CLI mode.\n
     Example commands:\n
     - robin -m gpt4o -q "ransomware payments" -t 12\n
     - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename\n
@@ -68,7 +68,7 @@ def cli(model, query, threads, output):
     # Save or print the summary
     if not output:
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"summary_{now}.txt"
+        filename = f"summary_{now}.md"
     else:
         filename = output + ".md"
 
@@ -93,7 +93,7 @@ def cli(model, query, threads, output):
     help="Host for the Streamlit UI",
 )
 def ui(ui_port, ui_host):
-    """Launch the Streamlit UI for Robin."""
+    """Run Robin in GUI mode."""
     import sys, os
 
     # Use streamlit's internet CLI entrypoint

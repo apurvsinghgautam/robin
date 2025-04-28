@@ -1,21 +1,6 @@
-"""
-Streamlit UI for Robin: AI-Powered Dark Web OSINT Tool
-
-Usage:
-  # Run directly with Streamlit:
-  streamlit run streamlit_app.py
-
-Packaging as a standalone binary:
-  pip install pyinstaller
-  pyinstaller --onefile streamlit_app.py
-  # Then run:
-  dist/streamlit_app
-
-This script wraps the Robin CLI functions (search, scrape, LLM) into a web interface.
-"""
-
 import streamlit as st
 import time
+from datetime import datetime
 from search import get_search_results
 from scrape import scrape_multiple
 from llm_utils import BufferedStreamingHandler
@@ -52,7 +37,7 @@ st.markdown(
 st.sidebar.title("Robin")
 st.sidebar.text("AI-Powered Dark Web OSINT Tool")
 st.sidebar.markdown(
-    """Made by [Apurv Singh Gautam](https://www.linkedin.com/in/apurvsinghgautam/), while on the 🕵️‍♂️"""
+    """Made by [Apurv Singh Gautam](https://www.linkedin.com/in/apurvsinghgautam/)"""
 )
 st.sidebar.subheader("Settings")
 model = st.sidebar.selectbox(
@@ -136,9 +121,8 @@ if run_button and query:
         with hdr_col:
             st.subheader("Investigation Summary", anchor=None)
         with btn_col:
-            # safe file name from the refined query
-            safe_name = refined.replace(" ", "_")
-            fname = f"investigation_summary_{safe_name}.md"
+            now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            fname = f"summary_{now}.md"
             st.download_button(
                 label="📥 Download",
                 data=st.session_state.streamed_summary,

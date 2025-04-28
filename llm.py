@@ -44,7 +44,8 @@ def refine_query(llm, user_input):
     Rules:
     1. Analyze the user query and think about how it can be improved to use as search engine query
     2. Refine the user query by adding or removing words so that it returns the best result from dark web search engines
-    3. Output just the user query and nothing else
+    3. Don't use any logical operators (AND, OR, etc.)
+    4. Output just the user query and nothing else
 
     INPUT:
     """
@@ -63,7 +64,7 @@ def filter_results(llm, query, results):
     You are a Cybercrime Threat Intelligence Expert. You are given a dark web search query and a list of search results in the form of index, link and title. 
     Your task is select the Top 20 relevant results that best match the search query for user to investigate more.
     Rule:
-    1. Output only the top 20 indices (comma-separated list) no more than that that best match the input query
+    1. Output ONLY atmost top 20 indices (comma-separated list) no more than that that best match the input query
 
     Search Query: {query}
     Search Results:
