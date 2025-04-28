@@ -80,7 +80,7 @@ mkdir -p output
 docker run --rm \
    -v "$(pwd)/.env:/app/.env" \
    -v "$(pwd)/output:/app/output" \
-   robin --model gpt4o --query "dark web financial fraud" --output results
+   robin cli --model gpt4o --query "dark web financial fraud" --output results
 ```
 
 - **UI-mode:**
