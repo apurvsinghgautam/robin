@@ -53,18 +53,6 @@ robin cli --model gpt-4.1 --query "ransomware payments"
 robin ui 
 ```
 
-### Using Python (Development Version)
-
-- With `Python 3.10+` installed, run the following:
-
-```bash
-pip install -r requirements.txt
-python main.py -m gpt-4.1 -q "ransomware payments" -t 12
-```
-
-> [!TIP]
-> You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH
-
 ### Docker Image
 
 - Build the Docker Image:
@@ -76,21 +64,23 @@ docker build -t robin .
 - Run the Container:
 
 ```bash
-mkdir -p output
-docker run --rm \
-   -v "$(pwd)/.env:/app/.env" \
-   -v "$(pwd)/output:/app/output" \
-   robin cli --model gpt4o --query "dark web financial fraud" --output results
-```
-
-- **UI-mode:**
-```bash
 docker run --rm \
    -v "$(pwd)/.env:/app/.env" \
    -p 8501:8501 \
    robin ui --ui-port 8501 --ui-host 0.0.0.0
 ```
 
+### Using Python (Development Version)
+
+- With `Python 3.10+` installed, run the following:
+
+```bash
+pip install -r requirements.txt
+python main.py -m gpt-4.1 -q "ransomware payments" -t 12
+```
+
+> [!TIP]
+> You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH
 
 ---
 
