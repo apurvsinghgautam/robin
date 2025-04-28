@@ -1,4 +1,3 @@
-import sys
 import click
 import subprocess
 from yaspin import yaspin
@@ -95,19 +94,29 @@ def cli(model, query, threads, output):
 )
 def ui(ui_port, ui_host):
     """Launch the Streamlit UI for Robin."""
-    cmd = [
-        sys.executable,
-        "-m",
+    import sys, os
+
+    # Use streamlit's internet CLI entrypoint
+    from streamlit.web import cli as stcli
+
+    # When PyInstaller one-file, data files livei n _MEIPASS
+    if getattr(sys, "frozen", False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(__file__)
+
+    ui_script = os.path.join(base, "ui.py")
+    # Build sys.argv
+    sys.argv = [
         "streamlit",
         "run",
-        "ui.py",
-        "--",
-        "--server.address",
-        ui_host,
-        "--server.port",
-        str(ui_port),
+        ui_script,
+        f"--server.port={ui_port}",
+        f"--server.address={ui_host}",
+        "--global.developmentMode=false",
     ]
-    subprocess.run(cmd, check=True)
+    # This will never return until streamlit exits
+    sys.exit(stcli.main())
 
 
 if __name__ == "__main__":
