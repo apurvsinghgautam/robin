@@ -1,0 +1,7 @@
+[server]
+runOnSave = true
+
+[theme]
+base="dark"
+backgroundColor="#000000"
+secondaryBackgroundColor="#222222"

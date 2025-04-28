@@ -3,18 +3,20 @@
    <br><a href="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml"><img alt="Build" src="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml/badge.svg"></a> <a href="https://github.com/apurvsinghgautam/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a>
    <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
-   <p>Robin is an AI-powered CLI-based tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries, filter search results from dark web search engines, and provide an investigation summary.</p>
+   <p>Robin is an AI-powered tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries, filter search results from dark web search engines, and provide an investigation summary.</p>
    <a href="#installation">Installation</a> &bull; <a href="#usage">Usage</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
 </div>
 
 ![Demo](.github/assets/screen.png)
+![Demo](.github/assets/screen-ui.png)
+
 
 ---
 
 ## Features
 
 - ⚙️ **Modular Architecture** – Clean separation between search, scrape, and LLM workflows.
-- 🤖 **Multi-Model Support** – Easily switch between OpenAI, Claude, or local models like Ollama.
+- 🤖 **Multi-Model Support** – Easily switch between OpenAI, Claude, Gemini or local models like Ollama.
 - 💻 **CLI-First Design** – Built for terminal warriors and automation ninjas.
 - 🐳 **Docker-Ready** – Optional Docker deployment for clean, isolated usage.
 - 📝 **Custom Reporting** – Save investigation output to file for reporting or further analysis.
@@ -36,10 +38,19 @@
 ### Release Binary (Recommended)
 
 - Download the appropriate binary for your system from the [latest release](https://github.com/apurvsinghgautam/robin/releases/latest)
-- Unzip the file, make the binary executable with `chmod +x robin`, and run as
-
+- Unzip the file, make it executable 
 ```bash
-robin -m gpt-4.1 -q "ransomware payments"
+chmod +x robin
+```
+
+- Run in **CLI mode**:
+```bash
+robin cli --model gpt-4.1 --query "ransomware payments"
+```
+
+- Run in **UI mode**:
+```bash
+robin ui 
 ```
 
 ### Using Python (Development Version)
@@ -71,6 +82,15 @@ docker run --rm \
    -v "$(pwd)/output:/app/output" \
    robin --model gpt4o --query "dark web financial fraud" --output results
 ```
+
+- **UI-mode:**
+```bash
+docker run --rm \
+   -v "$(pwd)/.env:/app/.env" \
+   -p 8501:8501 \
+   robin ui --ui-port 8501 --ui-host 0.0.0.0
+```
+
 
 ---
 
