@@ -35,7 +35,7 @@
 > [!NOTE]
 > The tool needs Tor to do the searches. You can install Tor using `apt install tor` on Linux/Windows(WSL) or `brew install tor` on Mac. Once installed, confirm if Tor is running in the background.
 
-### Release Binary (Recommended)
+### Release Binary (CLI Mode)
 
 - Download the appropriate binary for your system from the [latest release](https://github.com/apurvsinghgautam/robin/releases/latest)
 - Unzip the file, make it executable 
@@ -43,17 +43,12 @@
 chmod +x robin
 ```
 
-- Run in **CLI mode**:
+- Run the binary as:
 ```bash
 robin cli --model gpt-4.1 --query "ransomware payments"
 ```
 
-- Run in **UI mode**:
-```bash
-robin ui 
-```
-
-### Docker Image
+### Docker Image (Web UI Mode)
 
 - Build the Docker Image:
 
@@ -61,7 +56,7 @@ robin ui
 docker build -t robin .
 ```
 
-- Run the Container:
+- Run the Docker as:
 
 ```bash
 docker run --rm \

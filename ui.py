@@ -1,8 +1,8 @@
 import base64
 import streamlit as st
 from datetime import datetime
-from search import get_search_results
 from scrape import scrape_multiple
+from search import get_search_results
 from llm_utils import BufferedStreamingHandler
 from llm import get_llm, refine_query, filter_results, generate_summary
 

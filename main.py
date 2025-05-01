@@ -93,7 +93,7 @@ def cli(model, query, threads, output):
     help="Host for the Streamlit UI",
 )
 def ui(ui_port, ui_host):
-    """Run Robin in GUI mode."""
+    """Run Robin in Web UI mode."""
     import sys, os
 
     # Use streamlit's internet CLI entrypoint
