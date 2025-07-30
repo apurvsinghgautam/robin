@@ -117,7 +117,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 Open an Issue for any of these situations:
 - If you spot a bug or bad code
-- If you have questions or about doubts about usage
+- If you have a feature request idea
+- If you have questions or doubts about usage
 
 ---
 
