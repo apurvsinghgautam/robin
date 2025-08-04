@@ -10,9 +10,32 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-def get_llm(model_choice):
+def get_llm(model_choice, custom_endpoint=None, custom_api_key=None, custom_endpoint_type=None):
     model_choice_lower = model_choice.lower()
-    # Look up the configuration in the map
+    
+    # Handle custom endpoints
+    if custom_endpoint and custom_endpoint_type:
+        if custom_endpoint_type == "ollama":
+            # For Ollama custom endpoint
+            from langchain_ollama import ChatOllama
+            llm_instance = ChatOllama(
+                model=model_choice,
+                base_url=custom_endpoint,
+                **_common_llm_params
+            )
+            return llm_instance
+        elif custom_endpoint_type == "openai":
+            # For OpenAI custom endpoint
+            from langchain_openai import ChatOpenAI
+            llm_instance = ChatOpenAI(
+                model_name=model_choice,
+                openai_api_base=custom_endpoint,
+                openai_api_key=custom_api_key,
+                **_common_llm_params
+            )
+            return llm_instance
+    
+    # Look up the configuration in the map for built-in models
     config = _llm_config_map.get(model_choice_lower)
 
     if config is None:  # Extra error check

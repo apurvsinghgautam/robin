@@ -4,7 +4,8 @@ from langchain_ollama import ChatOllama
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.callbacks.base import BaseCallbackHandler
-
+import requests
+import json
 
 class BufferedStreamingHandler(BaseCallbackHandler):
     def __init__(self, buffer_limit: int = 60, ui_callback: Optional[Callable[[str], None]] = None):
@@ -61,6 +62,10 @@ _llm_config_map = {
     'gemini-2.5-flash': {
         'class': ChatGoogleGenerativeAI,
         'constructor_params': {'model': 'gemini-2.5-flash-preview-04-17'}
+    },
+    'custom': {
+        'class': ChatOllama,
+        'constructor_params': {'model': 'llama3.1'}
     }
     # Add more models here easily:
     # 'mistral7b': {

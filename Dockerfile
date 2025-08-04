@@ -16,10 +16,11 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 
+
 COPY . .
+
+EXPOSE 8501
 
 RUN chmod +x /app/entrypoint.sh
 
-ENTRYPOINT ["/app/entrypoint.sh"]
-
-CMD []
+CMD ["/app/entrypoint.sh", "ui", "--ui-port", "8501", "--ui-host", "0.0.0.0"]
