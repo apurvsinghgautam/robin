@@ -119,5 +119,39 @@ def ui(ui_port, ui_host):
     sys.exit(stcli.main())
 
 
+@robin.command()
+@click.option(
+    "--api-port",
+    default=8000,
+    show_default=True,
+    type=int,
+    help="Port for the API server",
+)
+@click.option(
+    "--api-host",
+    default="0.0.0.0",
+    show_default=True,
+    type=str,
+    help="Host for the API server",
+)
+@click.option(
+    "--reload",
+    is_flag=True,
+    default=False,
+    help="Enable auto-reload for development",
+)
+def api(api_port, api_host, reload):
+    """Run Robin in API mode."""
+    import uvicorn
+    
+    uvicorn.run(
+        "api:app",
+        host=api_host,
+        port=api_port,
+        reload=reload,
+        log_level="info"
+    )
+
+
 if __name__ == "__main__":
     robin()

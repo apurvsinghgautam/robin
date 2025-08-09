@@ -1,4 +1,4 @@
-FROM python:3.10-slim-bullseye AS builder
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -11,15 +11,16 @@ RUN DEBIAN_FRONTEND="noninteractive" apt-get update && \
 
 WORKDIR /app
 
-COPY requirements.txt .
+# Copy uv configuration files and metadata files (required by pyproject.toml)
+COPY pyproject.toml uv.lock LICENSE README.md ./
 
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Install dependencies using uv
+RUN uv sync --frozen --no-dev
 
 COPY . .
 
 RUN chmod +x /app/entrypoint.sh
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["uv", "run", "/app/entrypoint.sh"]
 
 CMD []

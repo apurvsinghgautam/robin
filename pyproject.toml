@@ -1,0 +1,91 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "robin"
+version = "0.1.0"
+description = "AI-Powered Dark Web OSINT Tool"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Apurv Singh Gautam", email = "apurvsinghgautam@gmail.com"},
+]
+keywords = ["osint", "dark-web", "ai", "cybercrime", "threat-intelligence"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
+
+dependencies = [
+    "beautifulsoup4>=4.12.0",
+    "yaspin>=3.0.0",
+    "pysocks>=1.7.0",
+    "requests>=2.31.0",
+    "streamlit>=1.28.0",
+    "python-dotenv>=1.0.0",
+    "langchain-openai>=0.1.0",
+    "langchain-ollama>=0.1.0",
+    "langchain-anthropic>=0.1.0",
+    "langchain-community>=0.2.0",
+    "langchain-google-genai>=1.0.0",
+    "click>=8.1.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "pydantic>=2.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.25.0",
+    "pytest-mock>=3.12.0",
+]
+
+[project.scripts]
+robin = "main:robin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+include = [
+    "*.py",
+    "tests/*.py",
+    "examples/*.py",
+    "docs/*.md"
+]
+exclude = [
+    "*.pyc",
+    "__pycache__/",
+    ".git/",
+    ".venv/"
+]
+
+[project.urls]
+Homepage = "https://github.com/apurvsinghgautam/robin"
+Repository = "https://github.com/apurvsinghgautam/robin"
+Issues = "https://github.com/apurvsinghgautam/robin/issues"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.25.0",
+    "pytest-mock>=3.12.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+asyncio_mode = "auto" 
