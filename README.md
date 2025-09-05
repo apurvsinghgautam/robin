@@ -76,7 +76,8 @@ python main.py -m gpt-4.1 -q "ransomware payments" -t 12
 ```
 
 > [!TIP]
-> You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH
+> You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
+>
 > For Ollama, provide `http://host.docker.internal:11434` as Ollama URL if running using docker image method or `http://127.0.0.1:11434` for other methods.
 
 ---
