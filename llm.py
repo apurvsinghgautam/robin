@@ -86,10 +86,21 @@ def filter_results(llm, query, results):
         result_indices = chain.invoke({"query": query, "results": final_str})
 
     # Select top_k results using original (non-truncated) results
-    top_results = [
-        results[i - 1]
-        for i in [int(item.strip()) for item in result_indices.split(",")]
-    ]
+    # top_results = [
+    #     results[i - 1]
+    #     for i in [int(item.strip()) for item in result_indices.split(",")]
+    # ]
+
+    try:
+        top_results = [
+            results[i - 1]
+            for i in [int(item.strip()) for item in result_indices.split(",")]
+        ]
+    except ValueError:
+        print("LLM returned unexpected text. Output:")
+        print(result_indices)
+        return []
+
 
     return top_results
 
