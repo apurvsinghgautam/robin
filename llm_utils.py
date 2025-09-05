@@ -1,3 +1,4 @@
+from config import OLLAMA_BASE_URL
 from typing import Callable, Optional
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
@@ -54,9 +55,9 @@ _llm_config_map = {
         'class': ChatAnthropic,
         'constructor_params': {'model': 'claude-3-5-sonnet-latest'}
     },
-    'lamma3.1': { 
+    'llama3.1': { 
         'class': ChatOllama,
-        'constructor_params': {'model': 'llama3.1'}
+        'constructor_params': {'model': 'llama3.1:latest', 'base_url': OLLAMA_BASE_URL}
     },
     'gemini-2.5-flash': {
         'class': ChatGoogleGenerativeAI,
@@ -65,10 +66,10 @@ _llm_config_map = {
     # Add more models here easily:
     # 'mistral7b': {
     #     'class': ChatOllama,
-    #     'constructor_params': {'model': 'mistral:7b'}
+    #     'constructor_params': {'model': 'mistral:7b', 'base_url': OLLAMA_BASE_URL}
     # },
     # 'gpt3.5': {
     #      'class': ChatOpenAI,
-    #      'constructor_params': {'model_name': 'gpt-3.5-turbo'}
+    #      'constructor_params': {'model_name': 'gpt-3.5-turbo', 'base_url': OLLAMA_BASE_URL}
     # }
 }

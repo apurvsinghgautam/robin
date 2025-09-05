@@ -61,6 +61,7 @@ docker build -t robin .
 ```bash
 docker run --rm \
    -v "$(pwd)/.env:/app/.env" \
+   --add-host=host.docker.internal:host-gateway \
    -p 8501:8501 \
    robin ui --ui-port 8501 --ui-host 0.0.0.0
 ```
@@ -76,6 +77,7 @@ python main.py -m gpt-4.1 -q "ransomware payments" -t 12
 
 > [!TIP]
 > You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH
+> For Ollama, provide `http://host.docker.internal:11434` as Ollama URL if running using docker image method or `http://127.0.0.1:11434` for other methods.
 
 ---
 
