@@ -54,7 +54,7 @@ _llm_config_map = {
         'class': ChatAnthropic,
         'constructor_params': {'model': 'claude-3-5-sonnet-latest'}
     },
-    'lamma3.1': { 
+    'llama3.1': { 
         'class': ChatOllama,
         'constructor_params': {'model': 'llama3.1'}
     },
