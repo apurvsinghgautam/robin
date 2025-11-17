@@ -1,6 +1,6 @@
 <div align="center">
    <img src=".github/assets/logo.png" alt="Logo" width="300">
-   <br><a href="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml"><img alt="Build" src="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml/badge.svg"></a> <a href="https://github.com/apurvsinghgautam/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a>
+   <br><a href="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml"><img alt="Build" src="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml/badge.svg"></a> <a href="https://github.com/apurvsinghgautam/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a> <a href="https://hub.docker.com/r/apurvsg/robin"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/apurvsg/robin"></a>
    <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
    <p>Robin is an AI-powered tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries, filter search results from dark web search engines, and provide an investigation summary.</p>
@@ -35,6 +35,21 @@
 > [!NOTE]
 > The tool needs Tor to do the searches. You can install Tor using `apt install tor` on Linux/Windows(WSL) or `brew install tor` on Mac. Once installed, confirm if Tor is running in the background.
 
+> [!TIP]
+> You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
+>
+> For Ollama, provide `http://host.docker.internal:11434` as Ollama URL if running using docker image method or `http://127.0.0.1:11434` for other methods.
+
+### Docker (Web UI Mode) [Recommended]
+
+```bash
+docker run --rm \
+   -v "$(pwd)/.env:/app/.env" \
+   --add-host=host.docker.internal:host-gateway \
+   -p 8501:8501 \
+   apurvsg/robin:latest ui --ui-port 8501 --ui-host 0.0.0.0
+```
+
 ### Release Binary (CLI Mode)
 
 - Download the appropriate binary for your system from the [latest release](https://github.com/apurvsinghgautam/robin/releases/latest)
@@ -48,16 +63,6 @@ chmod +x robin
 robin cli --model gpt-4.1 --query "ransomware payments"
 ```
 
-### Docker Image (Web UI Mode)
-
-```bash
-docker run --rm \
-   -v "$(pwd)/.env:/app/.env" \
-   --add-host=host.docker.internal:host-gateway \
-   -p 8501:8501 \
-   apurvsg/robin:latest ui --ui-port 8501 --ui-host 0.0.0.0
-```
-
 ### Using Python (Development Version)
 
 - With `Python 3.10+` installed, run the following:
@@ -66,11 +71,6 @@ docker run --rm \
 pip install -r requirements.txt
 python main.py -m gpt-4.1 -q "ransomware payments" -t 12
 ```
-
-> [!TIP]
-> You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
->
-> For Ollama, provide `http://host.docker.internal:11434` as Ollama URL if running using docker image method or `http://127.0.0.1:11434` for other methods.
 
 ---
 
@@ -123,3 +123,4 @@ Open an Issue for any of these situations:
 - Tools inspiration from my [OSINT Tools for the Dark Web](https://github.com/apurvsinghgautam/dark-web-osint-tools) repository.
 - LLM Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
 - Logo Design by my friend [Tanishq Rupaal](https://github.com/Tanq16/)
+
