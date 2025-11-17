@@ -4,8 +4,10 @@ pysocks
 requests
 streamlit
 python-dotenv
+langchain
 langchain-openai
 langchain-ollama
 langchain-anthropic
 langchain_community
+
 langchain_google_genai
