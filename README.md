@@ -18,6 +18,7 @@
 - ⚙️ **Modular Architecture** – Clean separation between search, scrape, and LLM workflows.
 - 🤖 **Multi-Model Support** – Easily switch between OpenAI, Claude, Gemini or local models like Ollama.
 - 💻 **CLI-First Design** – Built for terminal warriors and automation ninjas.
+- 🌐 **REST API** – Complete FastAPI-based REST API for programmatic access and integration.
 - 🐳 **Docker-Ready** – Optional Docker deployment for clean, isolated usage.
 - 📝 **Custom Reporting** – Save investigation output to file for reporting or further analysis.
 - 🧩 **Extensible** – Easy to plug in new search engines, models, or output formats.
@@ -65,16 +66,59 @@ robin cli --model gpt-4.1 --query "ransomware payments"
 
 ### Using Python (Development Version)
 
-- With `Python 3.10+` installed, run the following:
+- With `Python 3.10+` and [uv](https://docs.astral.sh/uv/) installed, run the following:
 
 ```bash
-pip install -r requirements.txt
-python main.py -m gpt-4.1 -q "ransomware payments" -t 12
+# Install dependencies with uv
+uv sync
+
+# Run CLI mode
+uv run python main.py cli -m gpt-4.1 -q "ransomware payments" -t 12
+
+# Run Web UI mode
+uv run python main.py ui
+
+# Run API mode
+uv run python main.py api --reload
+```
+
+### Building from Source
+
+To build Robin into distributable packages:
+
+```bash
+# Build both source and wheel distributions
+uv build
+
+# This creates:
+# - dist/robin-0.1.0.tar.gz (source distribution)
+# - dist/robin-0.1.0-py3-none-any.whl (wheel distribution)
+```
+
+To test the built package:
+
+```bash
+# Create test environment and install
+uv venv test_env
+source test_env/bin/activate
+uv pip install dist/robin-0.1.0-py3-none-any.whl
+
+# Test the installed robin command
+robin --help
+robin cli --model gpt4o --query "test query"
+
+# Clean up
+deactivate
+rm -rf test_env
 ```
 
 ---
 
 ## Usage
+
+Robin supports three modes of operation:
+
+### CLI Mode (Command Line)
 
 ```bash
 Robin: AI-Powered Dark Web OSINT Tool
@@ -96,6 +140,52 @@ Example commands:
  - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename
  - robin -m llama3.1 -q "zero days"
  - robin -m gemini-2.5-flash -q "zero days"
+```
+
+### Web UI Mode
+
+Start the Streamlit web interface:
+
+```bash
+# Default settings (localhost:8501)
+python main.py ui
+```
+
+### API Mode
+
+Start the FastAPI REST API server:
+
+```bash
+# Development mode with auto-reload
+python main.py api --reload
+
+# Production mode
+python main.py api --api-host 0.0.0.0 --api-port 8000
+```
+
+The API provides interactive documentation at:
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
+
+For complete API documentation and examples, see: **[API Documentation](docs/API_README.md)**
+
+---
+
+## Testing
+
+Robin includes a test suite to ensure reliability and stability.
+
+### Running Tests
+
+```bash
+# Run all tests
+uv run python -m pytest tests/ -v
+
+# Run tests with coverage
+uv run python -m pytest tests/ -v --cov=.
+
+# Run specific test file
+uv run python -m pytest tests/test_api.py -v
 ```
 
 ---
