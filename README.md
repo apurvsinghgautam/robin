@@ -50,20 +50,12 @@ robin cli --model gpt-4.1 --query "ransomware payments"
 
 ### Docker Image (Web UI Mode)
 
-- Build the Docker Image:
-
-```bash
-docker build -t robin .
-```
-
-- Run the Docker as:
-
 ```bash
 docker run --rm \
    -v "$(pwd)/.env:/app/.env" \
    --add-host=host.docker.internal:host-gateway \
    -p 8501:8501 \
-   robin ui --ui-port 8501 --ui-host 0.0.0.0
+   apurvsg/robin:latest ui --ui-port 8501 --ui-host 0.0.0.0
 ```
 
 ### Using Python (Development Version)
