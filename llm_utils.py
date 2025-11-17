@@ -8,7 +8,11 @@ from langchain_core.callbacks.base import BaseCallbackHandler
 
 
 class BufferedStreamingHandler(BaseCallbackHandler):
-    def __init__(self, buffer_limit: int = 60, ui_callback: Optional[Callable[[str], None]] = None):
+    def __init__(
+        self,
+        buffer_limit: int = 60,
+        ui_callback: Optional[Callable[[str], None]] = None,
+    ):
         self.buffer = ""
         self.buffer_limit = buffer_limit
         self.ui_callback = ui_callback
@@ -43,26 +47,20 @@ _common_llm_params = {
 # Map input model choices (lowercased) to their configuration
 # Each config includes the class and any model-specific constructor parameters
 _llm_config_map = {
-    'gpt4o': {
-        'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-4o'}
+    "gpt4o": {"class": ChatOpenAI, "constructor_params": {"model_name": "gpt-4o"}},
+    "gpt-4.1": {"class": ChatOpenAI, "constructor_params": {"model_name": "gpt-4.1"}},
+    "claude-3-5-sonnet-latest": {
+        "class": ChatAnthropic,
+        "constructor_params": {"model": "claude-3-5-sonnet-latest"},
     },
-    'gpt-4.1': { 
-        'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-4.1'} 
+    "llama3.1": {
+        "class": ChatOllama,
+        "constructor_params": {"model": "llama3.1:latest", "base_url": OLLAMA_BASE_URL},
     },
-    'claude-3-5-sonnet-latest': {
-        'class': ChatAnthropic,
-        'constructor_params': {'model': 'claude-3-5-sonnet-latest'}
+    "gemini-2.5-flash": {
+        "class": ChatGoogleGenerativeAI,
+        "constructor_params": {"model": "gemini-2.5-flash"},
     },
-    'llama3.1': { 
-        'class': ChatOllama,
-        'constructor_params': {'model': 'llama3.1:latest', 'base_url': OLLAMA_BASE_URL}
-    },
-    'gemini-2.5-flash': {
-        'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-flash-preview-04-17'}
-    }
     # Add more models here easily:
     # 'mistral7b': {
     #     'class': ChatOllama,
