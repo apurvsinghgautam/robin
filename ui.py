@@ -25,7 +25,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS for styling
+# Custom CSS for styling (glassmorphism-inspired)
 st.markdown(
     """
     <style>
@@ -45,6 +45,16 @@ st.markdown(
                 padding: 5px;
                 padding-left: 0px;
                 text-align: center;
+            }
+            .glass {
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 12px;
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+                padding: 10px 12px;
+                margin-bottom: 10px;
             }
     </style>""",
     unsafe_allow_html=True,
@@ -95,6 +105,8 @@ status_slot = st.empty()
 # Pre-allocate three placeholders-one per card
 cols = st.columns(3)
 p1, p2, p3 = [col.empty() for col in cols]
+# Stage progress
+stage_progress = st.progress(0, text="Idle")
 # Summary placeholders
 summary_container_placeholder = st.empty()
 
@@ -121,9 +133,10 @@ if run_button and query:
         with st.spinner("🔄 Refining query..."):
             st.session_state.refined = refine_query(llm, query)
     p1.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Refined Query</p><p>{st.session_state.refined}</p></div>",
+        f"<div class='glass colHeight'><p class='pTitle'>Refined Query</p><p>{st.session_state.refined}</p></div>",
         unsafe_allow_html=True,
     )
+    stage_progress.progress(20, text="Query refined")
 
     # Stage 3 - Search dark web
     with status_slot.container():
@@ -132,9 +145,10 @@ if run_button and query:
                 st.session_state.refined, threads
             )
     p2.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Search Results</p><p>{len(st.session_state.results)}</p></div>",
+        f"<div class='glass colHeight'><p class='pTitle'>Search Results</p><p>{len(st.session_state.results)}</p></div>",
         unsafe_allow_html=True,
     )
+    stage_progress.progress(40, text="Search completed")
 
     # Stage 4 - Filter results
     with status_slot.container():
@@ -143,16 +157,26 @@ if run_button and query:
                 llm, st.session_state.refined, st.session_state.results
             )
     p3.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Filtered Results</p><p>{len(st.session_state.filtered)}</p></div>",
+        f"<div class='glass colHeight'><p class='pTitle'>Filtered Results</p><p>{len(st.session_state.filtered)}</p></div>",
         unsafe_allow_html=True,
     )
+    stage_progress.progress(55, text="Results filtered")
+
+    # New: let the user select which results to scrape
+    options = [f"{i+1}. {item['title'][:60]}" for i, item in enumerate(st.session_state.filtered)]
+    idx_map = {f"{i+1}. {item['title'][:60]}": i for i, item in enumerate(st.session_state.filtered)}
+    selection = st.multiselect(
+        "Select results to scrape", options, default=options, help="Unselect to skip scraping specific results."
+    )
+    selected = [st.session_state.filtered[idx_map[label]] for label in selection]
 
     # Stage 5 - Scrape content
     with status_slot.container():
         with st.spinner("📜 Scraping content..."):
             st.session_state.scraped = cached_scrape_multiple(
-                st.session_state.filtered, threads
+                selected, threads
             )
+    stage_progress.progress(75, text="Scraping complete")
 
     # Stage 6 - Summarize
     # 6a) Prepare session state for streaming text
@@ -175,6 +199,7 @@ if run_button and query:
             stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
             llm.callbacks = [stream_handler]
             _ = generate_summary(llm, query, st.session_state.scraped)
+    stage_progress.progress(95, text="Summary generated")
 
     with btn_col:
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -182,4 +207,26 @@ if run_button and query:
         b64 = base64.b64encode(st.session_state.streamed_summary.encode()).decode()
         href = f'<div class="aStyle">📥 <a href="data:file/markdown;base64,{b64}" download="{fname}">Download</a></div>'
         st.markdown(href, unsafe_allow_html=True)
+    # Provide CSV/JSON export of sources
+    import json, pandas as pd
+    sources_df = pd.DataFrame([
+        {"url": url, "excerpt": text} for url, text in st.session_state.scraped.items()
+    ])
+    exp_col1, exp_col2 = st.columns(2)
+    with exp_col1:
+        st.download_button(
+            label="Download sources (CSV)",
+            data=sources_df.to_csv(index=False).encode("utf-8"),
+            file_name="sources.csv",
+            mime="text/csv",
+        )
+    with exp_col2:
+        st.download_button(
+            label="Download sources (JSON)",
+            data=json.dumps(sources_df.to_dict(orient="records"), ensure_ascii=False, indent=2),
+            file_name="sources.json",
+            mime="application/json",
+        )
+
+    stage_progress.progress(100, text="Done")
     status_slot.success("✔️ Pipeline completed successfully!")

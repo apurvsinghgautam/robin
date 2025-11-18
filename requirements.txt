@@ -10,3 +10,4 @@ langchain-ollama
 langchain-anthropic
 langchain_community
 langchain_google_genai
+pandas
