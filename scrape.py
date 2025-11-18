@@ -1,11 +1,15 @@
-import random
+import random, time, logging
 import requests
 import threading
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from config import MAX_SCRAPE_CHARS
 
 import warnings
 warnings.filterwarnings("ignore")
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Define a list of rotating user agents.
 USER_AGENTS = [
@@ -42,15 +46,27 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
         "User-Agent": random.choice(USER_AGENTS)
     }
     try:
-        response = requests.get(url, headers=headers, proxies=proxies, timeout=30)
+        # simple retry/backoff
+        last_exc = None
+        for attempt in range(3):
+            try:
+                response = requests.get(url, headers=headers, proxies=proxies, timeout=30)
+                break
+            except Exception as e:
+                last_exc = e
+                time.sleep(0.5 * (2 ** attempt) + random.random() * 0.2)
+        else:
+            raise last_exc
+
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
-            scraped_text = url_data['title'] + soup.get_text().replace('\n', ' ').replace('\r', '')
+            scraped_text = url_data['title'] + " " + soup.get_text().replace('\n', ' ').replace('\r', '')
         else:
             scraped_text = url_data['title']
-    except:
+    except Exception as e:
+        logger.debug(f"scrape error for {url}: {e}")
         scraped_text = url_data['title']
-    
+
     return url, scraped_text
 
 def scrape_multiple(urls_data, max_workers=5):
@@ -65,7 +81,7 @@ def scrape_multiple(urls_data, max_workers=5):
       A dictionary mapping each URL to its scraped content.
     """
     results = {}
-    max_chars = 1200 # Taking first n chars from the scraped data
+    max_chars = MAX_SCRAPE_CHARS  # Taking first n chars from the scraped data
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_url = {
             executor.submit(scrape_single, url_data): url_data
