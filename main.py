@@ -5,6 +5,7 @@ from datetime import datetime
 from scrape import scrape_multiple
 from search import get_search_results
 from llm import get_llm, refine_query, filter_results, generate_summary
+from llm_utils import get_available_models
 
 
 @click.group()
@@ -21,7 +22,7 @@ def robin():
     default="gpt-5-mini",
     show_default=True,
     type=click.Choice(
-        ["gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "claude-sonnet-4-5", "claude-sonnet-4-0", "llama3.1", "llama3.2", "gemma3", "deepseek-r1", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+        get_available_models()
     ),
     help="Select LLM model to use",
 )

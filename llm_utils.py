@@ -1,4 +1,4 @@
-from config import OLLAMA_BASE_URL
+from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY
 from typing import Callable, Optional
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
@@ -43,15 +43,15 @@ _common_llm_params = {
 # Map input model choices (lowercased) to their configuration
 # Each config includes the class and any model-specific constructor parameters
 _llm_config_map = {
-    'gpt-4.1': { 
+    'gpt-4.1': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-4.1'} 
     },
-    'gpt-5.1': { 
+    'gpt-5.1': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-5.1'} 
     },
-    'gpt-5-mini': { 
+    'gpt-5-mini': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-5-mini'} 
     },
@@ -79,30 +79,39 @@ _llm_config_map = {
         'class': ChatGoogleGenerativeAI,
         'constructor_params': {'model': 'gemini-2.5-pro'}
     },
-    'llama3.2': { 
+    'llama3.2': {
         'class': ChatOllama,
         'constructor_params': {'model': 'llama3.2:latest', 'base_url': OLLAMA_BASE_URL}
     },
-    'llama3.1': { 
+    'llama3.1': {
         'class': ChatOllama,
         'constructor_params': {'model': 'llama3.1:latest', 'base_url': OLLAMA_BASE_URL}
     },
-    'gemma3': { 
+    'gemma3': {
         'class': ChatOllama,
         'constructor_params': {'model': 'gemma3:latest', 'base_url': OLLAMA_BASE_URL}
     },
-    'deepseek-r1': { 
+    'deepseek-r1': {
         'class': ChatOllama,
         'constructor_params': {'model': 'deepseek-r1:latest', 'base_url': OLLAMA_BASE_URL}
-    }
-    
+    },
+    'gpt-4o-mini-openrouter': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'openai/gpt-4o-mini',
+            'base_url': OPENROUTER_BASE_URL,
+            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
+    },
     # Add more models here easily:
     # 'mistral7b': {
     #     'class': ChatOllama,
     #     'constructor_params': {'model': 'mistral:7b', 'base_url': OLLAMA_BASE_URL}
     # },
-    # 'gpt3.5': {
-    #      'class': ChatOpenAI,
-    #      'constructor_params': {'model_name': 'gpt-3.5-turbo', 'base_url': OLLAMA_BASE_URL}
-    # }
+    # Example: Using OpenRouter with ChatOpenAI
 }
+
+# Export list of available models for UI
+def get_available_models():
+    """Returns a list of all available model names from the config map."""
+    return list(_llm_config_map.keys())
