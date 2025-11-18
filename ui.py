@@ -3,7 +3,7 @@ import streamlit as st
 from datetime import datetime
 from scrape import scrape_multiple
 from search import get_search_results
-from llm_utils import BufferedStreamingHandler
+from llm_utils import BufferedStreamingHandler, get_model_choices
 from llm import get_llm, refine_query, filter_results, generate_summary
 
 
@@ -58,11 +58,23 @@ st.sidebar.markdown(
     """Made by [Apurv Singh Gautam](https://www.linkedin.com/in/apurvsinghgautam/)"""
 )
 st.sidebar.subheader("Settings")
+model_options = get_model_choices()
+default_model_index = (
+    next(
+        (idx for idx, name in enumerate(model_options) if name.lower() == "gpt4o"),
+        0,
+    )
+    if model_options
+    else 0
+)
 model = st.sidebar.selectbox(
     "Select LLM Model",
-    ["gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"],
+    model_options,
+    index=default_model_index,
     key="model_select",
 )
+if any(name not in {"gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"} for name in model_options):
+    st.sidebar.caption("Locally detected Ollama models are automatically added to this list.")
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
 
 
