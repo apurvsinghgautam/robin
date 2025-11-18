@@ -18,12 +18,12 @@ def robin():
 @click.option(
     "--model",
     "-m",
-    default="gpt4o",
+    default="gpt-5-mini",
     show_default=True,
     type=click.Choice(
-        ["gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"]
+        ["gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "claude-sonnet-4-5", "claude-sonnet-4-0", "llama3.1", "llama3.2", "gemma3", "deepseek-r1", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
     ),
-    help="Select LLM model to use (e.g., gpt4o, claude sonnet 3.5, ollama models)",
+    help="Select LLM model to use",
 )
 @click.option("--query", "-q", required=True, type=str, help="Dark web search query")
 @click.option(
