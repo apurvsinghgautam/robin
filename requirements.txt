@@ -1,4 +1,5 @@
 bs4
+click
 yaspin
 pysocks
 requests
@@ -9,3 +10,4 @@ langchain-ollama
 langchain-anthropic
 langchain_community
 langchain_google_genai
+pandas
