@@ -69,8 +69,18 @@ robin cli --model gpt-4.1 --query "ransomware payments"
 
 ```bash
 pip install -r requirements.txt
-python main.py -m gpt-4.1 -q "ransomware payments" -t 12
+python main.py cli -m gpt-4.1 -q "ransomware payments" -t 12
 ```
+
+#### Environment variables
+Create a `.env` from `.env.example` or export them in your shell:
+
+- OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY (set the one(s) you plan to use)
+- OLLAMA_BASE_URL (e.g., http://127.0.0.1:11434)
+- TOR_SOCKS_HOST and TOR_SOCKS_PORT (default 127.0.0.1:9050)
+- MAX_SCRAPE_CHARS (default 1200)
+
+Note: The app will warn if Tor SOCKS is not detected; searches may return empty without Tor.
 
 ---
 

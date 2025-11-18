@@ -2,7 +2,7 @@ import base64
 import streamlit as st
 from datetime import datetime
 from scrape import scrape_multiple
-from search import get_search_results
+from search import get_search_results, is_tor_running
 from llm_utils import BufferedStreamingHandler
 from llm import get_llm, refine_query, filter_results, generate_summary
 
@@ -101,6 +101,8 @@ if run_button and query:
     with status_slot.container():
         with st.spinner("🔄 Loading LLM..."):
             llm = get_llm(model)
+            if not is_tor_running():
+                st.warning("Tor SOCKS proxy not detected at 127.0.0.1:9050. Searches may return empty.")
 
     # Stage 2 - Refine query
     with status_slot.container():

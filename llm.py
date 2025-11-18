@@ -1,5 +1,4 @@
 import re
-import openai
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from llm_utils import _llm_config_map, _common_llm_params
@@ -78,18 +77,36 @@ def filter_results(llm, query, results):
     chain = prompt_template | llm | StrOutputParser()
     try:
         result_indices = chain.invoke({"query": query, "results": final_str})
-    except openai.RateLimitError as e:
+    except Exception as e:
         print(
-            f"Rate limit error: {e} \n Truncating to Web titles only with 30 characters"
+            f"LLM error during filtering: {e}. Retrying with truncated titles only."
         )
         final_str = _generate_final_string(results, truncate=True)
-        result_indices = chain.invoke({"query": query, "results": final_str})
+        try:
+            result_indices = chain.invoke({"query": query, "results": final_str})
+        except Exception as e2:
+            print(f"LLM error on retry: {e2}. Falling back to first results.")
+            result_indices = ""
 
-    # Select top_k results using original (non-truncated) results
-    top_results = [
-        results[i - 1]
-        for i in [int(item.strip()) for item in result_indices.split(",")]
-    ]
+    # Safely parse up to 20 indices from the model output
+    import re as _re
+    nums = []
+    if isinstance(result_indices, str):
+        nums = [int(n) for n in _re.findall(r"\d+", result_indices)]
+
+    seen = set()
+    picked = []
+    for n in nums:
+        if 1 <= n <= len(results) and n not in seen:
+            picked.append(n)
+            seen.add(n)
+        if len(picked) >= 20:
+            break
+
+    if not picked:
+        picked = list(range(1, min(20, len(results)) + 1))
+
+    top_results = [results[i - 1] for i in picked]
 
     return top_results
 
