@@ -60,7 +60,7 @@ st.sidebar.markdown(
 st.sidebar.subheader("Settings")
 model = st.sidebar.selectbox(
     "Select LLM Model",
-    ["gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"],
+    ["gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "claude-sonnet-4-5", "claude-sonnet-4-0", "llama3.1", "llama3.2", "gemma3", "deepseek-r1", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
     key="model_select",
 )
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
