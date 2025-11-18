@@ -1,10 +1,14 @@
 import requests
-import random, re
+import random, re, time, socket, logging
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from config import TOR_SOCKS_HOST, TOR_SOCKS_PORT
 
 import warnings
 warnings.filterwarnings("ignore")
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
@@ -36,11 +40,31 @@ SEARCH_ENGINE_ENDPOINTS = [
     "http://3fzh7yuupdfyjhwt3ugzqqof6ulbcl27ecev33knxe3u7goi3vfn2qqd.onion/oss/index.php?search={query}", # OSS (Onion Search Server)
 ]
 
+def is_tor_running(host: str = TOR_SOCKS_HOST, port: int = TOR_SOCKS_PORT, timeout: float = 0.5) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def get_tor_proxies():
     return {
-        "http": "socks5h://127.0.0.1:9050",
-        "https": "socks5h://127.0.0.1:9050"
+        "http": f"socks5h://{TOR_SOCKS_HOST}:{TOR_SOCKS_PORT}",
+        "https": f"socks5h://{TOR_SOCKS_HOST}:{TOR_SOCKS_PORT}",
     }
+
+
+def _request_with_retries(url, headers=None, proxies=None, timeout=30, max_retries=3, base_sleep=0.5):
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return requests.get(url, headers=headers, proxies=proxies, timeout=timeout)
+        except Exception as e:
+            last_exc = e
+            sleep = base_sleep * (2 ** attempt) + random.random() * 0.2
+            time.sleep(sleep)
+    raise last_exc
 
 def fetch_search_results(endpoint, query):
     url = endpoint.format(query=query)
@@ -49,24 +73,31 @@ def fetch_search_results(endpoint, query):
     }
     proxies = get_tor_proxies()
     try:
-        response = requests.get(url, headers=headers, proxies=proxies, timeout=30)
+        response = _request_with_retries(url, headers=headers, proxies=proxies, timeout=30)
         if response.status_code == 200:
-            # Normally you would parse html_content with BeautifulSoup and extract results.
             soup = BeautifulSoup(response.text, "html.parser")
             links = []
             for a in soup.find_all('a'):
                 try:
-                    href = a['href']
+                    href = a.get('href') or ""
                     title = a.get_text(strip=True)
-                    link = re.findall(r'https?:\/\/[^\/]*\.onion.*', href)
-                    if len(link) != 0:
-                        links.append({"title": title, "link": link[0]})
-                except:
+                    # Normalize onion links
+                    if href.startswith('//'):
+                        href = 'http:' + href
+                    if re.match(r'^([a-zA-Z]+:)?//', href) is None and '.onion' in href:
+                        href = 'http://' + href.lstrip('/')
+                    m = re.findall(r'https?:\/\/[^\s\"]*\.onion[^\s\"]*', href)
+                    if m:
+                        links.append({"title": title, "link": m[0]})
+                except Exception as e:
+                    logger.debug(f"link-parse error on {endpoint}: {e}")
                     continue
             return links
         else:
+            logger.debug(f"Non-200 from {url}: {response.status_code}")
             return []
-    except:
+    except Exception as e:
+        logger.debug(f"request error for {url}: {e}")
         return []
 
 def get_search_results(refined_query, max_workers=5):

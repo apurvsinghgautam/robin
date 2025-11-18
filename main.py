@@ -3,7 +3,7 @@ import subprocess
 from yaspin import yaspin
 from datetime import datetime
 from scrape import scrape_multiple
-from search import get_search_results
+from search import get_search_results, is_tor_running
 from llm import get_llm, refine_query, filter_results, generate_summary
 
 
@@ -47,6 +47,10 @@ def cli(model, query, threads, output):
     - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename\n
     - robin -m llama3.1 -q "zero days"\n
     """
+    # Warn if Tor not detected (we still continue; some links may be clearnet)
+    if not is_tor_running():
+        click.echo("[WARN] Tor SOCKS proxy not detected at 127.0.0.1:9050. Searches may return empty.")
+
     llm = get_llm(model)
 
     # Show spinner while processing the query
