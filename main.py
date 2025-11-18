@@ -21,7 +21,7 @@ def robin():
 @click.option(
     "--model",
     "-m",
-    default="gpt4o",
+    default="gpt-5-mini",
     show_default=True,
     type=click.Choice(MODEL_CHOICES),
     help="Select LLM model to use (e.g., gpt4o, claude sonnet 3.5, ollama models)",

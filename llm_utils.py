@@ -45,26 +45,59 @@ _common_llm_params = {
 # Map input model choices (lowercased) to their configuration
 # Each config includes the class and any model-specific constructor parameters
 _llm_config_map = {
-    'gpt4o': {
-        'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-4o'}
-    },
     'gpt-4.1': { 
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-4.1'} 
     },
-    'claude-3-5-sonnet-latest': {
+    'gpt-5.1': { 
+        'class': ChatOpenAI,
+        'constructor_params': {'model_name': 'gpt-5.1'} 
+    },
+    'gpt-5-mini': { 
+        'class': ChatOpenAI,
+        'constructor_params': {'model_name': 'gpt-5-mini'} 
+    },
+    'gpt-5-nano': { 
+        'class': ChatOpenAI,
+        'constructor_params': {'model_name': 'gpt-5-nano'} 
+    },
+    'claude-sonnet-4-5': {
         'class': ChatAnthropic,
-        'constructor_params': {'model': 'claude-3-5-sonnet-latest'}
+        'constructor_params': {'model': 'claude-sonnet-4-5'}
+    },
+    'claude-sonnet-4-0': {
+        'class': ChatAnthropic,
+        'constructor_params': {'model': 'claude-sonnet-4-0'}
+    },
+    'gemini-2.5-flash': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-2.5-flash'}
+    },
+    'gemini-2.5-flash-lite': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-2.5-flash-lite'}
+    },
+    'gemini-2.5-pro': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-2.5-pro'}
+    },
+    'llama3.2': { 
+        'class': ChatOllama,
+        'constructor_params': {'model': 'llama3.2:latest', 'base_url': OLLAMA_BASE_URL}
     },
     'llama3.1': { 
         'class': ChatOllama,
         'constructor_params': {'model': 'llama3.1:latest', 'base_url': OLLAMA_BASE_URL}
     },
-    'gemini-2.5-flash': {
-        'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-flash-preview-04-17'}
+    'gemma3': { 
+        'class': ChatOllama,
+        'constructor_params': {'model': 'gemma3:latest', 'base_url': OLLAMA_BASE_URL}
+    },
+    'deepseek-r1': { 
+        'class': ChatOllama,
+        'constructor_params': {'model': 'deepseek-r1:latest', 'base_url': OLLAMA_BASE_URL}
     }
+    
     # Add more models here easily:
     # 'mistral7b': {
     #     'class': ChatOllama,
