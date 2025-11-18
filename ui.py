@@ -3,7 +3,7 @@ import streamlit as st
 from datetime import datetime
 from scrape import scrape_multiple
 from search import get_search_results
-from llm_utils import BufferedStreamingHandler
+from llm_utils import BufferedStreamingHandler, get_available_models
 from llm import get_llm, refine_query, filter_results, generate_summary
 
 
@@ -60,7 +60,7 @@ st.sidebar.markdown(
 st.sidebar.subheader("Settings")
 model = st.sidebar.selectbox(
     "Select LLM Model",
-    ["gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-4.1", "claude-sonnet-4-5", "claude-sonnet-4-0", "llama3.1", "llama3.2", "gemma3", "deepseek-r1", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
+    get_available_models(),
     key="model_select",
 )
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
