@@ -9,6 +9,28 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
+def missing_model_env(model_choice: str):
+    m = model_choice.lower()
+    missing = []
+    if m in ("gpt4o", "gpt-4.1"):
+        from config import OPENAI_API_KEY
+        if not OPENAI_API_KEY:
+            missing.append("OPENAI_API_KEY")
+    elif m == "claude-3-5-sonnet-latest":
+        from config import ANTHROPIC_API_KEY
+        if not ANTHROPIC_API_KEY:
+            missing.append("ANTHROPIC_API_KEY")
+    elif m == "gemini-2.5-flash":
+        from config import GOOGLE_API_KEY
+        if not GOOGLE_API_KEY:
+            missing.append("GOOGLE_API_KEY")
+    elif m == "llama3.1":
+        from config import OLLAMA_BASE_URL
+        if not OLLAMA_BASE_URL:
+            missing.append("OLLAMA_BASE_URL")
+    return missing
+
+
 def get_llm(model_choice):
     model_choice_lower = model_choice.lower()
     # Look up the configuration in the map
@@ -20,6 +42,14 @@ def get_llm(model_choice):
         raise ValueError(
             f"Unsupported LLM model: '{model_choice}'. "
             f"Supported models (case-insensitive match) are: {', '.join(supported_models)}"
+        )
+
+    # Validate required environment variables for the selected model
+    missing = missing_model_env(model_choice)
+    if missing:
+        raise ValueError(
+            f"Model '{model_choice}' requires environment variable(s): {', '.join(missing)}. "
+            f"Please set them in .env or your shell environment."
         )
 
     # Extract the necessary information from the configuration

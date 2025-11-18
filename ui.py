@@ -58,11 +58,19 @@ st.sidebar.markdown(
     """Made by [Apurv Singh Gautam](https://www.linkedin.com/in/apurvsinghgautam/)"""
 )
 st.sidebar.subheader("Settings")
+from llm import missing_model_env
+
 model = st.sidebar.selectbox(
     "Select LLM Model",
     ["gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"],
     key="model_select",
 )
+missing = missing_model_env(model)
+if missing:
+    st.sidebar.warning(f"Missing: {', '.join(missing)}")
+else:
+    st.sidebar.info("Model ready")
+
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
 
 
@@ -100,7 +108,11 @@ if run_button and query:
     # Stage 1 - Load LLM
     with status_slot.container():
         with st.spinner("🔄 Loading LLM..."):
-            llm = get_llm(model)
+            try:
+                llm = get_llm(model)
+            except ValueError as e:
+                st.error(str(e))
+                st.stop()
             if not is_tor_running():
                 st.warning("Tor SOCKS proxy not detected at 127.0.0.1:9050. Searches may return empty.")
 

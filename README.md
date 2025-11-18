@@ -82,6 +82,12 @@ Create a `.env` from `.env.example` or export them in your shell:
 
 Note: The app will warn if Tor SOCKS is not detected; searches may return empty without Tor.
 
+Model requirements
+- gpt4o, gpt-4.1: requires OPENAI_API_KEY
+- claude-3-5-sonnet-latest: requires ANTHROPIC_API_KEY
+- gemini-2.5-flash: requires GOOGLE_API_KEY
+- llama3.1: requires OLLAMA_BASE_URL
+
 ---
 
 ## Usage

@@ -51,7 +51,11 @@ def cli(model, query, threads, output):
     if not is_tor_running():
         click.echo("[WARN] Tor SOCKS proxy not detected at 127.0.0.1:9050. Searches may return empty.")
 
-    llm = get_llm(model)
+    try:
+        llm = get_llm(model)
+    except ValueError as e:
+        click.echo(f"[ERROR] {e}")
+        return
 
     # Show spinner while processing the query
     with yaspin(text="Processing...", color="cyan") as sp:
