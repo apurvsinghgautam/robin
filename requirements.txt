@@ -1,4 +1,5 @@
 bs4
+click
 yaspin
 pysocks
 requests

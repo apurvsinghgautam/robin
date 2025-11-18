@@ -1,5 +1,4 @@
 import re
-import openai
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from llm_utils import _llm_config_map, _common_llm_params
@@ -8,6 +7,28 @@ from config import OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY
 import warnings
 
 warnings.filterwarnings("ignore")
+
+
+def missing_model_env(model_choice: str):
+    m = model_choice.lower()
+    missing = []
+    if m in ("gpt4o", "gpt-4.1"):
+        from config import OPENAI_API_KEY
+        if not OPENAI_API_KEY:
+            missing.append("OPENAI_API_KEY")
+    elif m == "claude-3-5-sonnet-latest":
+        from config import ANTHROPIC_API_KEY
+        if not ANTHROPIC_API_KEY:
+            missing.append("ANTHROPIC_API_KEY")
+    elif m == "gemini-2.5-flash":
+        from config import GOOGLE_API_KEY
+        if not GOOGLE_API_KEY:
+            missing.append("GOOGLE_API_KEY")
+    elif m == "llama3.1":
+        from config import OLLAMA_BASE_URL
+        if not OLLAMA_BASE_URL:
+            missing.append("OLLAMA_BASE_URL")
+    return missing
 
 
 def get_llm(model_choice):
@@ -21,6 +42,14 @@ def get_llm(model_choice):
         raise ValueError(
             f"Unsupported LLM model: '{model_choice}'. "
             f"Supported models (case-insensitive match) are: {', '.join(supported_models)}"
+        )
+
+    # Validate required environment variables for the selected model
+    missing = missing_model_env(model_choice)
+    if missing:
+        raise ValueError(
+            f"Model '{model_choice}' requires environment variable(s): {', '.join(missing)}. "
+            f"Please set them in .env or your shell environment."
         )
 
     # Extract the necessary information from the configuration
@@ -78,18 +107,36 @@ def filter_results(llm, query, results):
     chain = prompt_template | llm | StrOutputParser()
     try:
         result_indices = chain.invoke({"query": query, "results": final_str})
-    except openai.RateLimitError as e:
+    except Exception as e:
         print(
-            f"Rate limit error: {e} \n Truncating to Web titles only with 30 characters"
+            f"LLM error during filtering: {e}. Retrying with truncated titles only."
         )
         final_str = _generate_final_string(results, truncate=True)
-        result_indices = chain.invoke({"query": query, "results": final_str})
+        try:
+            result_indices = chain.invoke({"query": query, "results": final_str})
+        except Exception as e2:
+            print(f"LLM error on retry: {e2}. Falling back to first results.")
+            result_indices = ""
 
-    # Select top_k results using original (non-truncated) results
-    top_results = [
-        results[i - 1]
-        for i in [int(item.strip()) for item in result_indices.split(",")]
-    ]
+    # Safely parse up to 20 indices from the model output
+    import re as _re
+    nums = []
+    if isinstance(result_indices, str):
+        nums = [int(n) for n in _re.findall(r"\d+", result_indices)]
+
+    seen = set()
+    picked = []
+    for n in nums:
+        if 1 <= n <= len(results) and n not in seen:
+            picked.append(n)
+            seen.add(n)
+        if len(picked) >= 20:
+            break
+
+    if not picked:
+        picked = list(range(1, min(20, len(results)) + 1))
+
+    top_results = [results[i - 1] for i in picked]
 
     return top_results
 
