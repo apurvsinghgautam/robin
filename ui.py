@@ -304,16 +304,59 @@ if run_button and query:
     # 6a) Prepare session state for streaming text
     st.session_state.streamed_summary = ""
 
-    # 6c) UI callback for each chunk
-    def ui_emit(chunk: str):
-        st.session_state.streamed_summary += chunk
-        summary_slot.markdown(st.session_state.streamed_summary)
+    # Helper function to convert URLs to clickable markdown links
+    def make_links_clickable(text: str) -> str:
+        """Convert plain URLs in text to markdown links."""
+        # Pattern to match URLs (http, https, www)
+        url_pattern = r'(https?://[^\s<>"{}|\\^`\[\]]+|www\.[^\s<>"{}|\\^`\[\]]+)'
+        
+        def replace_url(match):
+            url = match.group(0)
+            # Add protocol if it's a www link
+            if url.startswith('www.'):
+                full_url = 'https://' + url
+            else:
+                full_url = url
+            # Truncate display text if too long
+            display_text = url
+            if len(display_text) > 60:
+                display_text = display_text[:57] + '...'
+            return f'[{display_text}]({full_url})'
+        
+        # Protect existing markdown links to avoid double-processing
+        result = text
+        markdown_links = []
+        link_pattern = r'\[([^\]]+)\]\(([^\)]+)\)'
+        
+        # Find and temporarily replace existing markdown links
+        for match in re.finditer(link_pattern, result):
+            link_text = match.group(1)
+            link_url = match.group(2)
+            placeholder = f'__PROTECTED_LINK_{len(markdown_links)}__'
+            markdown_links.append((link_text, link_url, placeholder))
+            result = result.replace(match.group(0), placeholder, 1)
+        
+        # Replace remaining plain URLs with markdown links
+        result = re.sub(url_pattern, replace_url, result)
+        
+        # Restore protected markdown links
+        for link_text, link_url, placeholder in markdown_links:
+            result = result.replace(placeholder, f'[{link_text}]({link_url})')
+        
+        return result
 
     with summary_container_placeholder.container():  # border=True, height=450):
         hdr_col, btn_col = st.columns([4, 1], vertical_alignment="center")
         with hdr_col:
             st.subheader("💠 Investigation Summary", anchor=None, divider="gray")
         summary_slot = st.empty()
+
+    # 6c) UI callback for each chunk (defined after summary_slot is created)
+    def ui_emit(chunk: str):
+        st.session_state.streamed_summary += chunk
+        # Convert URLs to clickable links before displaying
+        clickable_summary = make_links_clickable(st.session_state.streamed_summary)
+        summary_slot.markdown(clickable_summary)
 
     # 6d) Inject your two callbacks and invoke exactly as before
     with status_slot.container():
