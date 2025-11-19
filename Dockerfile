@@ -2,7 +2,6 @@ FROM python:3.10-slim-bullseye AS builder
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && \
     apt-get install -y --no-install-recommends \
-      tor \
       build-essential \
       curl \
       libssl-dev \
