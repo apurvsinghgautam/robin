@@ -279,6 +279,17 @@ model = st.sidebar.selectbox(
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
 st.sidebar.info("Need inspo? Try “impact of AI on climate funding” or “top privacy startups 2025”.")
 
+st.sidebar.markdown(
+    """
+    <a href="https://buymeacoffee.com/ndolo7" target="_blank" rel="noopener noreferrer">
+        <img src="https://cdn.buymeacoffee.com/buttons/v2/default-violet.png"
+             alt="Buy Me A Coffee"
+             style="width: 100%; max-width: 220px; height: auto; border-radius: 12px; box-shadow: 0 0 15px rgba(96, 165, 250, 0.3); margin-top: 12px;" />
+    </a>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # Main UI - hero and input
 st.markdown(
