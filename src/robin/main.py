@@ -1,10 +1,23 @@
 import click
 import subprocess
+import logging
 from yaspin import yaspin
 from datetime import datetime
-from scrape import scrape_multiple
-from search import get_search_results
-from llm import get_llm, refine_query, filter_results, generate_summary
+
+# Handle both direct execution and module import scenarios
+try:
+    from .scrape import scrape_multiple
+    from .search import get_search_results
+    from .llm import get_llm, refine_query, filter_results, generate_summary
+    from .config import logger, OUTPUTS_DIR
+except ImportError:
+    from scrape import scrape_multiple
+    from search import get_search_results
+    from llm import get_llm, refine_query, filter_results, generate_summary
+    from .config import OUTPUTS_DIR
+    # Initialize a logger if running directly
+    import logging
+    logger = logging.getLogger(__name__)
 
 
 @click.group()
@@ -47,33 +60,46 @@ def cli(model, query, threads, output):
     - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename\n
     - robin -m llama3.1 -q "zero days"\n
     """
+    # In CLI mode, set console logging to INFO level to show more details
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            handler.setLevel(logging.INFO)
+
+    logger.info(f"Starting CLI mode with query: {query}")
     llm = get_llm(model)
 
     # Show spinner while processing the query
     with yaspin(text="Processing...", color="cyan") as sp:
         refined_query = refine_query(llm, query)
+        logger.info(f"Refined query: {refined_query}")
 
         search_results = get_search_results(
             refined_query.replace(" ", "+"), max_workers=threads
         )
+        logger.info(f"Found {len(search_results)} search results")
 
         search_filtered = filter_results(llm, refined_query, search_results)
+        logger.info(f"Filtered to {len(search_filtered)} results")
 
         scraped_results = scrape_multiple(search_filtered, max_workers=threads)
+        logger.info(f"Scraped {len(scraped_results)} results")
         sp.ok("✔")
 
     # Generate the intelligence summary.
+    logger.info("Generating intelligence summary...")
     summary = generate_summary(llm, query, scraped_results)
 
     # Save or print the summary
     if not output:
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"summary_{now}.md"
+        filename = OUTPUTS_DIR / f"summary_{now}.md"
     else:
-        filename = output + ".md"
+        filename = OUTPUTS_DIR / output + ".md"
 
     with open(filename, "w", encoding="utf-8") as f:
         f.write(summary)
+        logger.info(f"Final intelligence summary saved to {filename}")
         click.echo(f"\n\n[OUTPUT] Final intelligence summary saved to {filename}")
 
 
@@ -83,17 +109,24 @@ def cli(model, query, threads, output):
     default=8501,
     show_default=True,
     type=int,
-    help="Port for the Streamlit UI",
+    help="Port for the Streamlit Web UI",
 )
 @click.option(
     "--ui-host",
     default="localhost",
     show_default=True,
     type=str,
-    help="Host for the Streamlit UI",
+    help="Host for the Streamlit Web UI",
 )
-def ui(ui_port, ui_host):
+def web(ui_port, ui_host):
     """Run Robin in Web UI mode."""
+    # In Web UI mode, keep console logging at WARNING level to avoid cluttering the terminal
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.StreamHandler):
+            handler.setLevel(logging.WARNING)
+
+    logger.info(f"Starting Web UI mode on {ui_host}:{ui_port}")
     import sys, os
 
     # Use streamlit's internet CLI entrypoint

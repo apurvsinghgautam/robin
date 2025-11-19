@@ -1,10 +1,22 @@
 import base64
 import streamlit as st
 from datetime import datetime
-from scrape import scrape_multiple
-from search import get_search_results
-from llm_utils import BufferedStreamingHandler
-from llm import get_llm, refine_query, filter_results, generate_summary
+
+# Handle both direct execution and module import scenarios
+try:
+    # Try relative imports for when the module is run as part of package
+    from .scrape import scrape_multiple
+    from .search import get_search_results
+    from .llm_utils import BufferedStreamingHandler
+    from .llm import get_llm, refine_query, filter_results, generate_summary
+    from .config import PROJECT_ROOT
+except ImportError:
+    # Fall back to absolute imports for when run directly by streamlit
+    from scrape import scrape_multiple
+    from search import get_search_results
+    from llm_utils import BufferedStreamingHandler
+    from llm import get_llm, refine_query, filter_results, generate_summary
+    from config import PROJECT_ROOT
 
 
 # Cache expensive backend calls
@@ -69,7 +81,19 @@ threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
 # Main UI - logo and input
 _, logo_col, _ = st.columns(3)
 with logo_col:
-    st.image(".github/assets/robin_logo.png", width=200)
+    import os
+    # Check the project-root-based path first (normal operation)
+    logo_path = PROJECT_ROOT / ".github" / "assets" / "robin_logo.png"
+
+    # If that doesn't exist, try the absolute path (Docker container)
+    if not logo_path.exists():
+        logo_path = "/.github/assets/robin_logo.png"
+
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=200)
+    else:
+        # If logo isn't found, just show a text placeholder
+        st.text("Robin OSINT Tool")
 
 # Display text box and button
 with st.form("search_form", clear_on_submit=True):
@@ -101,6 +125,10 @@ if run_button and query:
     with status_slot.container():
         with st.spinner("🔄 Loading LLM..."):
             llm = get_llm(model)
+            # Update the callbacks to UI mode to prevent terminal output
+            for callback in llm.callbacks:
+                if isinstance(callback, BufferedStreamingHandler):
+                    callback.mode = "ui"  # Set mode to UI to prevent console output
 
     # Stage 2 - Refine query
     with status_slot.container():
@@ -158,7 +186,7 @@ if run_button and query:
     # 6d) Inject your two callbacks and invoke exactly as before
     with status_slot.container():
         with st.spinner("✍️ Generating summary..."):
-            stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
+            stream_handler = BufferedStreamingHandler(ui_callback=ui_emit, mode="ui")
             llm.callbacks = [stream_handler]
             _ = generate_summary(llm, query, st.session_state.scraped)
 

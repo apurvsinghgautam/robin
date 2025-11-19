@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "robin-osint"
+version = "1.0.0"
+description = "AI-Powered Dark Web OSINT Tool - Modernized Fork"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Apurv Singh Gautam", email = "author@example.com"},  # Original Author
+    {name = "Onehand-Coding", email = "onehand.coding433@gmail.com"}  # Fork Maintainer
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License", 
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+]
+dependencies = [
+    "click>=8.0.0",
+    "yaspin>=2.0.0",
+    "pysocks>=1.7.1",
+    "requests>=2.25.0",
+    "streamlit>=1.28.0",
+    "python-dotenv>=0.19.0",
+    "langchain-openai>=0.0.5",
+    "langchain-ollama>=0.0.1",
+    "langchain-anthropic>=0.0.5",
+    "langchain-community>=0.0.10",
+    "langchain-google-genai>=0.0.3",
+    "beautifulsoup4>=4.9.0",
+]
+
+[project.scripts]
+robin = "robin.main:robin"
+
+[project.urls]
+Homepage = "https://github.com/onehand-coding/robin"  # Fork URL
+Documentation = "https://github.com/onehand-coding/robin#readme"
+Repository = "https://github.com/onehand-coding/robin"
+Issues = "https://github.com/onehand-coding/robin/issues"
+Changelog = "https://github.com/onehand-coding/robin/releases"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/robin"]

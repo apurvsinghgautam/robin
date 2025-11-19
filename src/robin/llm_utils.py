@@ -1,4 +1,8 @@
-from config import OLLAMA_BASE_URL
+try:
+    from .config import OLLAMA_BASE_URL
+except ImportError:
+    # For direct execution by streamlit run
+    from config import OLLAMA_BASE_URL
 from typing import Callable, Optional
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
@@ -8,22 +12,27 @@ from langchain_core.callbacks.base import BaseCallbackHandler
 
 
 class BufferedStreamingHandler(BaseCallbackHandler):
-    def __init__(self, buffer_limit: int = 60, ui_callback: Optional[Callable[[str], None]] = None):
+    def __init__(self, buffer_limit: int = 60, ui_callback: Optional[Callable[[str], None]] = None, mode: str = "cli"):
         self.buffer = ""
         self.buffer_limit = buffer_limit
         self.ui_callback = ui_callback
+        self.mode = mode  # 'cli' or 'ui'
 
     def on_llm_new_token(self, token: str, **kwargs) -> None:
         self.buffer += token
         if "\n" in token or len(self.buffer) >= self.buffer_limit:
-            print(self.buffer, end="", flush=True)
+            # Only print to console in CLI mode, not in UI mode
+            if self.mode == "cli":
+                print(self.buffer, end="", flush=True)
             if self.ui_callback:
                 self.ui_callback(self.buffer)
             self.buffer = ""
 
     def on_llm_end(self, response, **kwargs) -> None:
         if self.buffer:
-            print(self.buffer, end="", flush=True)
+            # Only print to console in CLI mode, not in UI mode
+            if self.mode == "cli":
+                print(self.buffer, end="", flush=True)
             if self.ui_callback:
                 self.ui_callback(self.buffer)
             self.buffer = ""
@@ -31,7 +40,8 @@ class BufferedStreamingHandler(BaseCallbackHandler):
 
 # --- Configuration Data ---
 # Instantiate common dependencies once
-_common_callbacks = [BufferedStreamingHandler(buffer_limit=60)]
+# The mode will be updated when needed, defaulting to 'cli' for backward compatibility
+_common_callbacks = [BufferedStreamingHandler(buffer_limit=60, mode="cli")]
 
 # Define common parameters for most LLMs
 _common_llm_params = {
@@ -61,7 +71,7 @@ _llm_config_map = {
     },
     'gemini-2.5-flash': {
         'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-flash-preview-04-17'}
+        'constructor_params': {'model': 'gemini-2.5-flash'}
     }
     # Add more models here easily:
     # 'mistral7b': {

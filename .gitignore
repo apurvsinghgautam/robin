@@ -173,5 +173,12 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# Vscode
+# IDEs
 .vscode
+*.sublime-*
+
+# Logs
+logs/
+
+# Outputs
+outputs/
