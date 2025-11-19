@@ -1,3 +1,3 @@
 #!/bin/bash
-echo "Starting Robin: AI-Powered Web Scraper..."
+echo "Starting Jewel: AI-Powered Web Scraper..."
 exec python main.py "$@"
