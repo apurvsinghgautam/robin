@@ -20,8 +20,8 @@ def cached_scrape_multiple(filtered: list, threads: int):
 
 # Streamlit page configuration
 st.set_page_config(
-    page_title="Robin: AI-Powered Web Scraper",
-    page_icon="🔍",
+    page_title="Jewel: AI-Powered Web Scraper",
+    page_icon="💎",
     initial_sidebar_state="expanded",
 )
 
@@ -29,37 +29,73 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-            .colHeight {
-                max-height: 40vh;
-                overflow-y: auto;
-                text-align: center;
-            }
-            .pTitle {
-                font-weight: bold;
-                color: #FF4B4B;
-                margin-bottom: 0.5em;
-            }
-            .aStyle {
-                font-size: 18px;
-                font-weight: bold;
-                padding: 5px;
-                padding-left: 0px;
-                text-align: center;
-            }
+        body {
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        .hero {
+            background: linear-gradient(120deg, #e0f7ff, #f5ecff);
+            border-radius: 24px;
+            padding: 32px;
+            margin-bottom: 18px;
+            border: 1px solid rgba(15, 23, 42, 0.05);
+        }
+        .hero h1 {
+            margin-bottom: 0.25em;
+            color: #4338ca;
+        }
+        .hero p {
+            font-size: 1.05rem;
+            margin-bottom: 0;
+        }
+        .hero-pills {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        .pill {
+            background: rgba(67, 56, 202, 0.08);
+            color: #4338ca;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .colHeight {
+            max-height: 40vh;
+            overflow-y: auto;
+            text-align: center;
+        }
+        .pTitle {
+            font-weight: bold;
+            color: #4338ca;
+            margin-bottom: 0.5em;
+        }
+        .aStyle {
+            font-size: 18px;
+            font-weight: bold;
+            padding: 5px;
+            padding-left: 0px;
+            text-align: center;
+        }
     </style>""",
     unsafe_allow_html=True,
 )
 
 
 # Sidebar
-st.sidebar.title("Robin")
-st.sidebar.text("AI-Powered Web Scraper")
+st.sidebar.title("Jewel")
+st.sidebar.caption("AI-Powered Web Companion 💎")
 st.sidebar.markdown(
     """Made by [Imani Ndolo](https://www.linkedin.com/in/imani-ndolo/)"""
 )
+st.sidebar.write(
+    "Jewel walks through refine → search → filter → summarize so you can stay focused on insights."
+)
 st.sidebar.subheader("Settings")
 model = st.sidebar.selectbox(
-    "Select LLM Model",
+    "Choose an LLM model",
     [
         "gpt4o", "gpt-4.1", 
         "claude-3-5-sonnet-latest", 
@@ -70,29 +106,54 @@ model = st.sidebar.selectbox(
     key="model_select",
 )
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
+st.sidebar.info("Need inspo? Try “impact of AI on climate funding” or “top privacy startups 2025”.")
 
 
-# Main UI - logo and input
-_, logo_col, _ = st.columns(3)
-with logo_col:
-    st.image(".github/assets/robin_logo.png", width=200)
+# Main UI - hero and input
+st.markdown(
+    """
+    <div class="hero">
+        <p class="pill" style="display:inline-block;margin-bottom:12px;">AI Powered Web Scraping</p>
+        <h1>💎 Meet Jewel</h1>
+        <p>Transform curiosities into confident research briefs with a calm, proven workflow.</p>
+        <div class="hero-pills">
+            <span class="pill">Refines your prompt</span>
+            <span class="pill">Curates high-signal links</span>
+            <span class="pill">Scrapes and summarizes kindly</span>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # Display text box and button
 with st.form("search_form", clear_on_submit=True):
     col_input, col_button = st.columns([10, 1])
     query = col_input.text_input(
-        "Enter Web Search Query",
-        placeholder="Enter Web Search Query",
+        "What should Jewel look into?",
+        placeholder="Ask anything you'd Google for deep research…",
         label_visibility="collapsed",
         key="query_input",
     )
     run_button = col_button.form_submit_button("Run")
+st.caption("Tip: the more context you add (audience, format, timeframe), the better Jewel can help.")
 
 # Display a status message
 status_slot = st.empty()
 # Pre-allocate three placeholders-one per card
 cols = st.columns(3)
 p1, p2, p3 = [col.empty() for col in cols]
+# Friendly placeholder cards
+default_cards = [
+    ("Refined Query", "Jewel will tidy your question for precise searching."),
+    ("Search Results", "We gather fresh links and data across the open web."),
+    ("Filtered Results", "Low-signal sources get filtered so only quality remains."),
+]
+for placeholder, (title, text) in zip((p1, p2, p3), default_cards):
+    placeholder.container(border=True).markdown(
+        f"<div class='colHeight'><p class='pTitle'>{title}</p><p>{text}</p></div>",
+        unsafe_allow_html=True,
+    )
 # Summary placeholders
 summary_container_placeholder = st.empty()
 
@@ -158,7 +219,7 @@ if run_button and query:
     with summary_container_placeholder.container():  # border=True, height=450):
         hdr_col, btn_col = st.columns([4, 1], vertical_alignment="center")
         with hdr_col:
-            st.subheader(":red[Investigation Summary]", anchor=None, divider="gray")
+            st.subheader("💠 Investigation Summary", anchor=None, divider="gray")
         summary_slot = st.empty()
 
     # 6d) Inject your two callbacks and invoke exactly as before
