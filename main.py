@@ -9,12 +9,12 @@ from llm import get_llm, refine_query, filter_results, generate_summary
 
 @click.group()
 @click.version_option()
-def robin():
-    """Robin: AI-Powered Web Scraper."""
+def jewel():
+    """Jewel: AI-Powered Web Scraper."""
     pass
 
 
-@robin.command()
+@jewel.command()
 @click.option(
     "--model",
     "-m",
@@ -41,11 +41,11 @@ def robin():
     help="Filename to save the final intelligence summary. If not provided, a filename based on the current date and time is used.",
 )
 def cli(model, query, threads, output):
-    """Run Robin in CLI mode.\n
+    """Run Jewel in CLI mode.\n
     Example commands:\n
-    - robin -m gpt4o -q "python web scraping" -t 12\n
-    - robin --model claude-3-5-sonnet-latest --query "machine learning tutorials" --threads 8 --output filename\n
-    - robin -m llama3.1 -q "open source projects"\n
+    - jewel -m gpt4o -q "python web scraping" -t 12\n
+    - jewel --model claude-3-5-sonnet-latest --query "machine learning tutorials" --threads 8 --output filename\n
+    - jewel -m llama3.1 -q "open source projects"\n
     """
     llm = get_llm(model)
 
@@ -77,7 +77,7 @@ def cli(model, query, threads, output):
         click.echo(f"\n\n[OUTPUT] Final intelligence summary saved to {filename}")
 
 
-@robin.command()
+@jewel.command()
 @click.option(
     "--ui-port",
     default=4000,
@@ -93,7 +93,7 @@ def cli(model, query, threads, output):
     help="Host for the Streamlit UI",
 )
 def ui(ui_port, ui_host):
-    """Run Robin in Web UI mode."""
+    """Run Jewel in Web UI mode."""
     import sys, os
 
     # Use streamlit's internet CLI entrypoint
@@ -120,4 +120,4 @@ def ui(ui_port, ui_host):
 
 
 if __name__ == "__main__":
-    robin()
+    jewel()
