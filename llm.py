@@ -39,13 +39,14 @@ def get_llm(model_choice):
 
 def refine_query(llm, user_input):
     system_prompt = """
-    You are a Cybercrime Threat Intelligence Expert. Your task is to refine the provided user query that needs to be sent to darkweb search engines. 
+    You are a Web Search Query Optimizer. Your task is to refine the provided user query to improve search engine results. 
     
     Rules:
-    1. Analyze the user query and think about how it can be improved to use as search engine query
-    2. Refine the user query by adding or removing words so that it returns the best result from dark web search engines
+    1. Analyze the user query and think about how it can be improved for web search engines
+    2. Refine the user query by adding or removing words so that it returns the best results from web search engines
     3. Don't use any logical operators (AND, OR, etc.)
-    4. Output just the user query and nothing else
+    4. Keep the query concise and focused
+    5. Output just the refined query and nothing else
 
     INPUT:
     """
@@ -61,10 +62,10 @@ def filter_results(llm, query, results):
         return []
 
     system_prompt = """
-    You are a Cybercrime Threat Intelligence Expert. You are given a dark web search query and a list of search results in the form of index, link and title. 
-    Your task is select the Top 20 relevant results that best match the search query for user to investigate more.
+    You are a Web Search Results Filter. You are given a web search query and a list of search results in the form of index, link and title. 
+    Your task is to select the Top 20 most relevant results that best match the search query.
     Rule:
-    1. Output ONLY atmost top 20 indices (comma-separated list) no more than that that best match the input query
+    1. Output ONLY at most top 20 indices (comma-separated list) that best match the input query
 
     Search Query: {query}
     Search Results:
@@ -107,9 +108,20 @@ def _generate_final_string(results, truncate=False):
 
     final_str = []
     for i, res in enumerate(results):
-        # Truncate link at .onion for display
-        truncated_link = re.sub(r"(?<=\.onion).*", "", res["link"])
-        title = re.sub(r"[^0-9a-zA-Z\-\.]", " ", res["title"])
+        # Truncate long URLs for display (keep domain and first part of path)
+        link = res.get("link", "")
+        # Extract domain and first part of path, truncate if too long
+        if len(link) > 80:
+            # Try to keep the domain and first part of path
+            match = re.match(r"(https?://[^/]+/[^/]*)", link)
+            if match:
+                truncated_link = match.group(1) + "..."
+            else:
+                truncated_link = link[:80] + "..."
+        else:
+            truncated_link = link
+        
+        title = re.sub(r"[^0-9a-zA-Z\-\.]", " ", res.get("title", ""))
         if truncated_link == "" and title == "":
             continue
 
@@ -134,26 +146,26 @@ def _generate_final_string(results, truncate=False):
 
 def generate_summary(llm, query, content):
     system_prompt = """
-    You are an Cybercrime Threat Intelligence Expert tasked with generating context-based technical investigative insights from dark web osint search engine results.
+    You are a Web Research Analyst tasked with generating comprehensive insights from web search results.
 
     Rules:
-    1. Analyze the Darkweb OSINT data provided using links and their raw text.
+    1. Analyze the web search data provided using links and their raw text content.
     2. Output the Source Links referenced for the analysis.
-    3. Provide a detailed, contextual, evidence-based technical analysis of the data.
-    4. Provide intellgience artifacts along with their context visible in the data.
-    5. The artifacts can include indicators like name, email, phone, cryptocurrency addresses, domains, darkweb markets, forum names, threat actor information, malware names, TTPs, etc.
+    3. Provide a detailed, contextual, evidence-based analysis of the data.
+    4. Extract and organize key information and artifacts from the content.
+    5. The artifacts can include names, emails, phone numbers, addresses, domains, organizations, technologies, concepts, dates, locations, etc.
     6. Generate 3-5 key insights based on the data.
     7. Each insight should be specific, actionable, context-based, and data-driven.
-    8. Include suggested next steps and queries for investigating more on the topic.
+    8. Include suggested next steps and queries for further research on the topic.
     9. Be objective and analytical in your assessment.
-    10. Ignore not safe for work texts from the analysis
+    10. Filter out any inappropriate or irrelevant content from the analysis.
 
     Output Format:
     1. Input Query: {query}
     2. Source Links Referenced for Analysis - this heading will include all source links used for the analysis
-    3. Investigation Artifacts - this heading will include all technical artifacts identified including name, email, phone, cryptocurrency addresses, domains, darkweb markets, forum names, threat actor information, malware names, etc.
+    3. Key Information & Artifacts - this heading will include all important information identified including names, emails, phone numbers, addresses, domains, organizations, technologies, concepts, dates, locations, etc.
     4. Key Insights
-    5. Next Steps - this includes next investigative steps including search queries to search more on a specific artifacts for example or any other topic.
+    5. Next Steps - this includes next research steps including search queries to explore specific topics or artifacts further.
 
     Format your response in a structured way with clear section headings.
 
