@@ -20,8 +20,8 @@ def cached_scrape_multiple(filtered: list, threads: int):
 
 # Streamlit page configuration
 st.set_page_config(
-    page_title="Robin: AI-Powered Dark Web OSINT Tool",
-    page_icon="🕵️‍♂️",
+    page_title="Robin: AI-Powered Web Scraper",
+    page_icon="🔍",
     initial_sidebar_state="expanded",
 )
 
@@ -53,14 +53,20 @@ st.markdown(
 
 # Sidebar
 st.sidebar.title("Robin")
-st.sidebar.text("AI-Powered Dark Web OSINT Tool")
+st.sidebar.text("AI-Powered Web Scraper")
 st.sidebar.markdown(
-    """Made by [Apurv Singh Gautam](https://www.linkedin.com/in/apurvsinghgautam/)"""
+    """Made by [Imani Ndolo](https://www.linkedin.com/in/imani-ndolo/)"""
 )
 st.sidebar.subheader("Settings")
 model = st.sidebar.selectbox(
     "Select LLM Model",
-    ["gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"],
+    [
+        "gpt4o", "gpt-4.1", 
+        "claude-3-5-sonnet-latest", 
+        "llama3.1", 
+        "gemini-2.5-flash",
+        "gemini-flash-latest"
+    ],
     key="model_select",
 )
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
@@ -75,8 +81,8 @@ with logo_col:
 with st.form("search_form", clear_on_submit=True):
     col_input, col_button = st.columns([10, 1])
     query = col_input.text_input(
-        "Enter Dark Web Search Query",
-        placeholder="Enter Dark Web Search Query",
+        "Enter Web Search Query",
+        placeholder="Enter Web Search Query",
         label_visibility="collapsed",
         key="query_input",
     )
@@ -111,9 +117,9 @@ if run_button and query:
         unsafe_allow_html=True,
     )
 
-    # Stage 3 - Search dark web
+    # Stage 3 - Search web
     with status_slot.container():
-        with st.spinner("🔍 Searching dark web..."):
+        with st.spinner("🔍 Searching web..."):
             st.session_state.results = cached_search_results(
                 st.session_state.refined, threads
             )
