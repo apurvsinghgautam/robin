@@ -10,7 +10,7 @@ from llm import get_llm, refine_query, filter_results, generate_summary
 @click.group()
 @click.version_option()
 def robin():
-    """Robin: AI-Powered Dark Web OSINT Tool."""
+    """Robin: AI-Powered Web Scraper."""
     pass
 
 
@@ -25,7 +25,7 @@ def robin():
     ),
     help="Select LLM model to use (e.g., gpt4o, claude sonnet 3.5, ollama models)",
 )
-@click.option("--query", "-q", required=True, type=str, help="Dark web search query")
+@click.option("--query", "-q", required=True, type=str, help="Web search query")
 @click.option(
     "--threads",
     "-t",
@@ -43,9 +43,9 @@ def robin():
 def cli(model, query, threads, output):
     """Run Robin in CLI mode.\n
     Example commands:\n
-    - robin -m gpt4o -q "ransomware payments" -t 12\n
-    - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename\n
-    - robin -m llama3.1 -q "zero days"\n
+    - robin -m gpt4o -q "python web scraping" -t 12\n
+    - robin --model claude-3-5-sonnet-latest --query "machine learning tutorials" --threads 8 --output filename\n
+    - robin -m llama3.1 -q "open source projects"\n
     """
     llm = get_llm(model)
 
@@ -80,7 +80,7 @@ def cli(model, query, threads, output):
 @robin.command()
 @click.option(
     "--ui-port",
-    default=8501,
+    default=4000,
     show_default=True,
     type=int,
     help="Port for the Streamlit UI",
