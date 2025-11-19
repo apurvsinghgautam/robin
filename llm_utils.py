@@ -61,7 +61,11 @@ _llm_config_map = {
     },
     'gemini-2.5-flash': {
         'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-flash-preview-04-17'}
+        'constructor_params': {'model': 'models/gemini-2.5-flash'}
+    },
+    'gemini-flash-latest': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'models/gemini-flash-latest'}
     }
     # Add more models here easily:
     # 'mistral7b': {
