@@ -1,15 +1,11 @@
 <div align="center">
    <img src=".github/assets/logo.png" alt="Logo" width="300">
    <br><a href="https://github.com/Ndolo7/robin/actions/workflows/binary.yml"><img alt="Build" src="https://github.com/Ndolo7/robin/actions/workflows/binary.yml/badge.svg"></a> <a href="https://github.com/Ndolo7/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a> <a href="https://hub.docker.com/r/apurvsg/robin"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/apurvsg/robin"></a>
-   <h1>Robin: AI-Powered Web Scraper</h1>
+  <h1>Jewel: AI-Powered Web Scraper</h1>
 
-   <p>Robin is an AI-powered tool for conducting web research and information gathering. It leverages LLMs to refine queries, filter search results from web search engines, scrape content, and provide comprehensive research summaries.</p>
+  <p>Jewel is an AI-powered tool for conducting web research and information gathering. It leverages LLMs to refine queries, filter search results from web search engines, scrape content, and provide comprehensive research summaries.</p>
    <a href="#installation">Installation</a> &bull; <a href="#usage">Usage</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
 </div>
-
-![Demo](.github/assets/screen.png)
-![Demo](.github/assets/screen-ui.png)
-
 
 ---
 
@@ -29,7 +25,7 @@
 >
 > Use responsibly and at your own risk. Ensure you comply with all relevant laws, website terms of service, and institutional policies before conducting web scraping activities.
 >
-> Additionally, Robin leverages third-party APIs (including LLMs). Be cautious when sending potentially sensitive queries, and review the terms of service for any API or model provider you use.
+> Additionally, Jewel leverages third-party APIs (including LLMs). Be cautious when sending potentially sensitive queries, and review the terms of service for any API or model provider you use.
 
 ## Installation
 > [!NOTE]
@@ -47,7 +43,7 @@ docker run --rm \
    -v "$(pwd)/.env:/app/.env" \
    --add-host=host.docker.internal:host-gateway \
    -p 4000:4000 \
-   robin:latest ui --ui-port 4000 --ui-host 0.0.0.0
+   jewel:latest ui --ui-port 4000 --ui-host 0.0.0.0
 ```
 
 ### Release Binary (CLI Mode)
@@ -55,12 +51,12 @@ docker run --rm \
 - Download the appropriate binary for your system from the [latest release](https://github.com/apurvsinghgautam/robin/releases/latest)
 - Unzip the file, make it executable 
 ```bash
-chmod +x robin
+chmod +x jewel
 ```
 
 - Run the binary as:
 ```bash
-robin cli --model gpt-4.1 --query "python web scraping tutorials"
+jewel cli --model gpt-4.1 --query "python web scraping tutorials"
 ```
 
 ### Using Python (Development Version)
@@ -77,7 +73,7 @@ python main.py -m gpt-4.1 -q "machine learning resources" -t 12
 ## Usage
 
 ```bash
-Robin: AI-Powered Web Scraper
+Jewel: AI-Powered Web Scraper
 
 options:
   -h, --help            show this help message and exit
@@ -92,10 +88,10 @@ options:
                         current date and time is used.
 
 Example commands:
- - robin -m gpt4o -q "python web scraping" -t 12
- - robin --model claude-3-5-sonnet-latest --query "machine learning tutorials" --threads 8 --output filename
- - robin -m llama3.1 -q "open source projects"
- - robin -m gemini-2.5-flash -q "data science resources"
+ - jewel -m gpt4o -q "python web scraping" -t 12
+ - jewel --model claude-3-5-sonnet-latest --query "machine learning tutorials" --threads 8 --output filename
+ - jewel -m llama3.1 -q "open source projects"
+ - jewel -m gemini-2.5-flash -q "data science resources"
 ```
 
 ---
