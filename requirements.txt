@@ -1,6 +1,6 @@
 bs4
 yaspin
-pysocks
+google
 requests
 streamlit
 python-dotenv
