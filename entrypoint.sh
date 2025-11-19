@@ -1,7 +1,3 @@
 #!/bin/bash
-echo "Starting Tor..."
-tor &
-sleep 15
-
-echo "Starting Robin: AI-Powered Dark Web OSINT Tool..."
+echo "Starting Robin: AI-Powered Web Scraper..."
 exec python main.py "$@"
