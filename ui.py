@@ -1,4 +1,5 @@
 import base64
+import re
 import streamlit as st
 from datetime import datetime
 from scrape import scrape_multiple
@@ -30,23 +31,38 @@ st.markdown(
     """
     <style>
         body {
-            background-color: #f8fafc;
-            color: #0f172a;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 25%, #16213e 50%, #0f1419 75%, #0a0a1a 100%);
+            color: #e2e8f0;
+        }
+        .main .block-container {
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 25%, #16213e 50%, #0f1419 75%, #0a0a1a 100%);
+        }
+        .stContainer {
+            background: linear-gradient(135deg, rgba(10, 10, 26, 0.95) 0%, rgba(26, 10, 46, 0.95) 25%, rgba(22, 33, 62, 0.95) 50%, rgba(15, 20, 25, 0.95) 75%, rgba(10, 10, 26, 0.95) 100%);
+        }
+        [data-testid="stAppViewContainer"] {
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 25%, #16213e 50%, #0f1419 75%, #0a0a1a 100%);
         }
         .hero {
-            background: linear-gradient(120deg, #e0f7ff, #f5ecff);
+            background: linear-gradient(135deg, rgba(6, 78, 59, 0.15) 0%, rgba(30, 58, 138, 0.15) 50%, rgba(88, 28, 135, 0.15) 100%);
             border-radius: 24px;
             padding: 32px;
             margin-bottom: 18px;
-            border: 1px solid rgba(15, 23, 42, 0.05);
+            border: 1px solid rgba(34, 211, 238, 0.3);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 30px rgba(34, 211, 238, 0.2), 
+                        0 0 60px rgba(88, 28, 135, 0.15),
+                        inset 0 0 20px rgba(34, 211, 238, 0.1);
         }
         .hero h1 {
             margin-bottom: 0.25em;
-            color: #4338ca;
+            color: #7dd3fc;
+            text-shadow: 0 0 10px rgba(125, 211, 252, 0.5), 0 0 20px rgba(125, 211, 252, 0.3);
         }
         .hero p {
             font-size: 1.05rem;
             margin-bottom: 0;
+            color: #bae6fd;
         }
         .hero-pills {
             display: flex;
@@ -55,22 +71,31 @@ st.markdown(
             margin-top: 16px;
         }
         .pill {
-            background: rgba(67, 56, 202, 0.08);
-            color: #4338ca;
+            background: rgba(30, 58, 138, 0.25);
+            color: #93c5fd;
             padding: 6px 14px;
             border-radius: 999px;
             font-size: 0.9rem;
             font-weight: 600;
+            border: 1px solid rgba(34, 211, 238, 0.4);
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.2), inset 0 0 5px rgba(34, 211, 238, 0.1);
         }
         .colHeight {
             max-height: 40vh;
             overflow-y: auto;
             text-align: center;
+            background: linear-gradient(135deg, rgba(10, 10, 26, 0.9) 0%, rgba(22, 33, 62, 0.9) 50%, rgba(15, 20, 25, 0.9) 100%);
+            border-radius: 12px;
+            padding: 16px;
+            color: #e2e8f0;
+            border: 1px solid rgba(34, 211, 238, 0.2);
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.15), inset 0 0 10px rgba(34, 211, 238, 0.05);
         }
         .pTitle {
             font-weight: bold;
-            color: #4338ca;
+            color: #60a5fa;
             margin-bottom: 0.5em;
+            text-shadow: 0 0 8px rgba(96, 165, 250, 0.4);
         }
         .aStyle {
             font-size: 18px;
@@ -78,6 +103,74 @@ st.markdown(
             padding: 5px;
             padding-left: 0px;
             text-align: center;
+        }
+        .aStyle a {
+            color: #60a5fa;
+            text-shadow: 0 0 5px rgba(96, 165, 250, 0.5);
+        }
+        .aStyle a:hover {
+            color: #93c5fd;
+            text-shadow: 0 0 10px rgba(147, 197, 253, 0.7);
+        }
+        /* Style for summary container */
+        [data-testid="stVerticalBlock"] > [style*="flex-direction: column"] {
+            background: linear-gradient(135deg, rgba(10, 10, 26, 0.95) 0%, rgba(22, 33, 62, 0.95) 50%, rgba(15, 20, 25, 0.95) 100%);
+        }
+        /* Make links in markdown clickable and styled */
+        .stMarkdown a {
+            color: #60a5fa;
+            text-decoration: underline;
+            text-shadow: 0 0 5px rgba(96, 165, 250, 0.4);
+        }
+        .stMarkdown a:hover {
+            color: #93c5fd;
+            text-shadow: 0 0 10px rgba(147, 197, 253, 0.6);
+        }
+        /* Style input boxes and form elements for dark theme */
+        .stTextInput > div > div > input {
+            background-color: rgba(10, 10, 26, 0.7);
+            color: #e2e8f0;
+            border: 1px solid rgba(34, 211, 238, 0.3);
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.1), inset 0 0 5px rgba(34, 211, 238, 0.05);
+        }
+        .stTextInput > div > div > input:focus {
+            border-color: #22d3ee;
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.3), 
+                        0 0 30px rgba(34, 211, 238, 0.2),
+                        inset 0 0 10px rgba(34, 211, 238, 0.1);
+        }
+        /* Style buttons */
+        .stButton > button {
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.8) 0%, rgba(88, 28, 135, 0.8) 100%);
+            color: #e0f2fe;
+            border: 1px solid rgba(34, 211, 238, 0.5);
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.3), inset 0 0 10px rgba(34, 211, 238, 0.1);
+            text-shadow: 0 0 5px rgba(224, 242, 254, 0.5);
+        }
+        .stButton > button:hover {
+            background: linear-gradient(135deg, rgba(30, 58, 138, 1) 0%, rgba(88, 28, 135, 1) 100%);
+            border-color: #22d3ee;
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.5), 
+                        0 0 40px rgba(34, 211, 238, 0.3),
+                        inset 0 0 15px rgba(34, 211, 238, 0.2);
+        }
+        /* Style sidebar */
+        [data-testid="stSidebar"] {
+            background: linear-gradient(135deg, rgba(10, 10, 26, 0.95) 0%, rgba(26, 10, 46, 0.95) 25%, rgba(22, 33, 62, 0.95) 50%, rgba(15, 20, 25, 0.95) 75%, rgba(10, 10, 26, 0.95) 100%);
+            box-shadow: 2px 0 20px rgba(34, 211, 238, 0.1);
+        }
+        /* Style containers with borders */
+        [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {
+            background: linear-gradient(135deg, rgba(10, 10, 26, 0.85) 0%, rgba(22, 33, 62, 0.85) 50%, rgba(15, 20, 25, 0.85) 100%);
+        }
+        /* Add glow to section headers */
+        h1, h2, h3 {
+            text-shadow: 0 0 10px rgba(125, 211, 252, 0.3);
+        }
+        /* Glow effect for dividers */
+        hr {
+            border-color: rgba(34, 211, 238, 0.3);
+            box-shadow: 0 0 5px rgba(34, 211, 238, 0.2);
         }
     </style>""",
     unsafe_allow_html=True,
