@@ -228,6 +228,30 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Add custom floating sidebar toggle button (works even if header is hidden)
+st.markdown(
+    """
+    <button class="custom-sidebar-toggle" onclick="
+        (function() {
+            const sidebarToggle = window.parent.document.querySelector('header[data-testid=\\'stHeader\\'] button:first-child');
+            if (sidebarToggle) {
+                sidebarToggle.click();
+            } else {
+                // Fallback: try to find and click any sidebar toggle
+                const buttons = window.parent.document.querySelectorAll('button');
+                for (let btn of buttons) {
+                    if (btn.getAttribute('title') && btn.getAttribute('title').toLowerCase().includes('sidebar')) {
+                        btn.click();
+                        break;
+                    }
+                }
+            }
+        })();
+    " title="Toggle Sidebar">☰</button>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # Sidebar
 st.sidebar.title("Jewel")
@@ -238,6 +262,8 @@ st.sidebar.markdown(
 st.sidebar.write(
     "Jewel walks through refine → search → filter → summarize so you can stay focused on insights."
 )
+st.sidebar.subheader("")
+
 st.sidebar.subheader("Settings")
 model = st.sidebar.selectbox(
     "Choose an LLM model",
