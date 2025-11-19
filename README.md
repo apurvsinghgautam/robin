@@ -1,6 +1,6 @@
 <div align="center">
    <img src=".github/assets/logo.png" alt="Logo" width="300">
-   <br><a href="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml"><img alt="Build" src="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml/badge.svg"></a> <a href="https://github.com/apurvsinghgautam/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a> <a href="https://hub.docker.com/r/apurvsg/robin"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/apurvsg/robin"></a>
+   <br><a href="https://github.com/Ndolo7/robin/actions/workflows/binary.yml"><img alt="Build" src="https://github.com/Ndolo7/robin/actions/workflows/binary.yml/badge.svg"></a> <a href="https://github.com/Ndolo7/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a> <a href="https://hub.docker.com/r/apurvsg/robin"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/apurvsg/robin"></a>
    <h1>Robin: AI-Powered Web Scraper</h1>
 
    <p>Robin is an AI-powered tool for conducting web research and information gathering. It leverages LLMs to refine queries, filter search results from web search engines, scrape content, and provide comprehensive research summaries.</p>
