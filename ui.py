@@ -393,9 +393,9 @@ if run_button and query:
     # 6a) Prepare session state for streaming text
     st.session_state.streamed_summary = ""
 
-    # Helper function to convert URLs to clickable markdown links
+    # Helper function to convert URLs to clickable HTML links
     def make_links_clickable(text: str) -> str:
-        """Convert plain URLs in text to markdown links."""
+        """Convert plain URLs and markdown links in text to HTML links."""
         # Pattern to match URLs (http, https, www)
         url_pattern = r'(https?://[^\s<>"{}|\\^`\[\]]+|www\.[^\s<>"{}|\\^`\[\]]+)'
         
@@ -410,27 +410,37 @@ if run_button and query:
             display_text = url
             if len(display_text) > 60:
                 display_text = display_text[:57] + '...'
-            return f'[{display_text}]({full_url})'
+            return f'<a href="{full_url}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline;">{display_text}</a>'
         
-        # Protect existing markdown links to avoid double-processing
+        # First, convert existing markdown links to HTML links
         result = text
-        markdown_links = []
         link_pattern = r'\[([^\]]+)\]\(([^\)]+)\)'
         
-        # Find and temporarily replace existing markdown links
-        for match in re.finditer(link_pattern, result):
+        def replace_markdown_link(match):
             link_text = match.group(1)
             link_url = match.group(2)
-            placeholder = f'__PROTECTED_LINK_{len(markdown_links)}__'
-            markdown_links.append((link_text, link_url, placeholder))
+            # Use the link text if it's not just the URL, otherwise use a truncated version
+            display_text = link_text if link_text != link_url else (link_url[:57] + '...' if len(link_url) > 60 else link_url)
+            return f'<a href="{link_url}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline;">{display_text}</a>'
+        
+        # Replace markdown links with HTML links
+        result = re.sub(link_pattern, replace_markdown_link, result)
+        
+        # Then replace remaining plain URLs with HTML links (but avoid URLs already in HTML links)
+        # Protect existing HTML links
+        html_link_pattern = r'<a[^>]*>.*?</a>'
+        html_links = []
+        for match in re.finditer(html_link_pattern, result):
+            placeholder = f'__HTML_LINK_{len(html_links)}__'
+            html_links.append((match.group(0), placeholder))
             result = result.replace(match.group(0), placeholder, 1)
         
-        # Replace remaining plain URLs with markdown links
+        # Replace plain URLs
         result = re.sub(url_pattern, replace_url, result)
         
-        # Restore protected markdown links
-        for link_text, link_url, placeholder in markdown_links:
-            result = result.replace(placeholder, f'[{link_text}]({link_url})')
+        # Restore HTML links
+        for html_link, placeholder in html_links:
+            result = result.replace(placeholder, html_link)
         
         return result
 
@@ -443,9 +453,9 @@ if run_button and query:
     # 6c) UI callback for each chunk (defined after summary_slot is created)
     def ui_emit(chunk: str):
         st.session_state.streamed_summary += chunk
-        # Convert URLs to clickable links before displaying
+        # Convert URLs to clickable HTML links before displaying
         clickable_summary = make_links_clickable(st.session_state.streamed_summary)
-        summary_slot.markdown(clickable_summary)
+        summary_slot.markdown(clickable_summary, unsafe_allow_html=True)
 
     # 6d) Inject your two callbacks and invoke exactly as before
     with status_slot.container():
