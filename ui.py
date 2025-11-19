@@ -48,6 +48,7 @@ st.markdown(
             border-radius: 24px;
             padding: 32px;
             margin-bottom: 18px;
+            margin-top: 30px;
             border: 1px solid rgba(34, 211, 238, 0.3);
             backdrop-filter: blur(10px);
             box-shadow: 0 0 30px rgba(34, 211, 238, 0.2), 
@@ -57,7 +58,6 @@ st.markdown(
         .hero h1 {
             margin-bottom: 0.25em;
             color: #7dd3fc;
-            text-shadow: 0 0 10px rgba(125, 211, 252, 0.5), 0 0 20px rgba(125, 211, 252, 0.3);
         }
         .hero p {
             font-size: 1.05rem;
@@ -171,6 +171,58 @@ st.markdown(
         hr {
             border-color: rgba(34, 211, 238, 0.3);
             box-shadow: 0 0 5px rgba(34, 211, 238, 0.2);
+        }
+        /* Style the header to match dark theme */
+        header[data-testid="stHeader"] {
+            background: linear-gradient(135deg, rgba(10, 10, 26, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
+            border-bottom: 1px solid rgba(34, 211, 238, 0.2);
+        }
+        /* Style sidebar toggle button in header */
+        header[data-testid="stHeader"] button[title*="sidebar" i],
+        header[data-testid="stHeader"] button[aria-label*="sidebar" i],
+        header[data-testid="stHeader"] button:first-child {
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.8) 0%, rgba(88, 28, 135, 0.8) 100%);
+            color: #e0f2fe;
+            border: 1px solid rgba(34, 211, 238, 0.4);
+            box-shadow: 0 0 10px rgba(34, 211, 238, 0.2);
+        }
+        header[data-testid="stHeader"] button:first-child:hover {
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.4);
+        }
+        /* Custom floating sidebar toggle button (backup if header is hidden) */
+        .custom-sidebar-toggle {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 999;
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.9) 0%, rgba(88, 28, 135, 0.9) 100%);
+            color: #e0f2fe;
+            border: 1px solid rgba(34, 211, 238, 0.5);
+            border-radius: 8px;
+            padding: 10px 14px;
+            cursor: pointer;
+            font-size: 1.3rem;
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.3), inset 0 0 10px rgba(34, 211, 238, 0.1);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 45px;
+            height: 45px;
+        }
+        .custom-sidebar-toggle:hover {
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.5), 
+                        0 0 40px rgba(34, 211, 238, 0.3),
+                        inset 0 0 15px rgba(34, 211, 238, 0.2);
+            transform: scale(1.05);
+        }
+        /* Hide custom toggle if header is visible */
+        header[data-testid="stHeader"]:not([style*="display: none"]) ~ * .custom-sidebar-toggle,
+        header[data-testid="stHeader"]:not([style*="display: none"]) ~ .custom-sidebar-toggle {
+            display: none;
+        }
+        .block-container {
+            padding-top: 1rem;
         }
     </style>""",
     unsafe_allow_html=True,
