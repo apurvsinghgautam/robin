@@ -41,6 +41,14 @@
 > For Ollama, provide `http://host.docker.internal:11434` as `OLLAMA_BASE_URL` in your env if running using docker method or `http://127.0.0.1:11434` for other methods. You might need to serve Ollama on 0.0.0.0 depending on your OS. You can do that using `OLLAMA_HOST=0.0.0.0 ollama serve &`.
 
 ### Docker (Web UI Mode) [Recommended]
+> [!NOTE]
+> Docker does not automatically update the image if it is already present locally. To benefit from the latest changes or fixes, it is recommended to run the following command before starting the container:
+>
+> ```bash
+> docker pull apurvsg/robin:latest
+> ```
+>
+> This ensures that you are always using the most recent version of the Robin image.
 
 ```bash
 docker run --rm \
@@ -123,4 +131,5 @@ Open an Issue for any of these situations:
 - Tools inspiration from my [OSINT Tools for the Dark Web](https://github.com/apurvsinghgautam/dark-web-osint-tools) repository.
 - LLM Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
 - Logo Design by my friend [Tanishq Rupaal](https://github.com/Tanq16/)
+
 
