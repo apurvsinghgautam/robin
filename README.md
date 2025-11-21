@@ -42,6 +42,12 @@
 
 ### Docker (Web UI Mode) [Recommended]
 
+- Pull the latest Robin docker image
+```bash
+docker pull apurvsg/robin:latest
+```
+
+- Run the docker image as:
 ```bash
 docker run --rm \
    -v "$(pwd)/.env:/app/.env" \
