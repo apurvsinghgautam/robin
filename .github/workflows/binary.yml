@@ -50,7 +50,7 @@ jobs:
           gh release create "${{ steps.version.outputs.new_version }}" \
             --title "Release ${{ steps.version.outputs.new_version }}" \
             --draft \
-            --notes "Release ${{ steps.version.outputs.new_version }} \n\n $COMMIT_MSG" \
+            --notes "$COMMIT_MSG" \
             --target ${{ github.sha }}
         env:
           GH_TOKEN: ${{ github.token }}
