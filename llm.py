@@ -2,8 +2,10 @@ import re
 import openai
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from llm_utils import _llm_config_map, _common_llm_params
+from llm_utils import _common_llm_params, resolve_model_config, get_model_choices
 from config import OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY
+import logging
+import re
 
 import warnings
 
@@ -11,13 +13,11 @@ warnings.filterwarnings("ignore")
 
 
 def get_llm(model_choice):
-    model_choice_lower = model_choice.lower()
-    # Look up the configuration in the map
-    config = _llm_config_map.get(model_choice_lower)
+    # Look up the configuration (cloud or local Ollama)
+    config = resolve_model_config(model_choice)
 
     if config is None:  # Extra error check
-        # Provide a helpful error message listing supported models
-        supported_models = list(_llm_config_map.keys())
+        supported_models = get_model_choices()
         raise ValueError(
             f"Unsupported LLM model: '{model_choice}'. "
             f"Supported models (case-insensitive match) are: {', '.join(supported_models)}"
@@ -86,10 +86,31 @@ def filter_results(llm, query, results):
         result_indices = chain.invoke({"query": query, "results": final_str})
 
     # Select top_k results using original (non-truncated) results
-    top_results = [
-        results[i - 1]
-        for i in [int(item.strip()) for item in result_indices.split(",")]
+    parsed_indices = []
+    for match in re.findall(r"\d+", result_indices):
+        try:
+            idx = int(match)
+            if 1 <= idx <= len(results):
+                parsed_indices.append(idx)
+        except ValueError:
+            continue
+
+    # Remove duplicates while preserving order
+    seen = set()
+    parsed_indices = [
+        i for i in parsed_indices if not (i in seen or seen.add(i))
     ]
+
+    if not parsed_indices:
+        logging.warning(
+            "Unable to interpret LLM result selection ('%s'). "
+            "Defaulting to the top %s results.",
+            result_indices,
+            min(len(results), 20),
+        )
+        parsed_indices = list(range(1, min(len(results), 20) + 1))
+
+    top_results = [results[i - 1] for i in parsed_indices[:20]]
 
     return top_results
 
