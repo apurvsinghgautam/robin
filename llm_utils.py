@@ -6,7 +6,7 @@ from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.callbacks.base import BaseCallbackHandler
-from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY
+from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY
 
 
 class BufferedStreamingHandler(BaseCallbackHandler):
@@ -71,15 +71,15 @@ _llm_config_map = {
     },
     'gemini-2.5-flash': {
         'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-flash'}
+        'constructor_params': {'model': 'gemini-2.5-flash', 'google_api_key': GOOGLE_API_KEY }
     },
     'gemini-2.5-flash-lite': {
         'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-flash-lite'}
+        'constructor_params': {'model': 'gemini-2.5-flash-lite', 'google_api_key': GOOGLE_API_KEY}
     },
     'gemini-2.5-pro': {
         'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-pro'}
+        'constructor_params': {'model': 'gemini-2.5-pro', 'google_api_key': GOOGLE_API_KEY}
     },
     'llama3.2': {
         'class': ChatOllama,
