@@ -98,8 +98,8 @@ options:
                         current date and time is used.
 
 Example commands:
- - robin -m gpt4o -q "ransomware payments" -t 12
- - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename
+ - robin -m gpt4.1 -q "ransomware payments" -t 12
+ - robin --model gpt4.1 --query "sensitive credentials exposure" --threads 8 --output filename
  - robin -m llama3.1 -q "zero days"
  - robin -m gemini-2.5-flash -q "zero days"
 ```
