@@ -1,12 +1,12 @@
-from config import OLLAMA_BASE_URL
-from typing import Callable, Optional, List
 import requests
 from urllib.parse import urljoin
 from langchain_openai import ChatOpenAI
 from langchain_ollama import ChatOllama
+from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.callbacks.base import BaseCallbackHandler
+from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY
 
 
 class BufferedStreamingHandler(BaseCallbackHandler):
@@ -45,15 +45,15 @@ _common_llm_params = {
 # Map input model choices (lowercased) to their configuration
 # Each config includes the class and any model-specific constructor parameters
 _llm_config_map = {
-    'gpt-4.1': { 
+    'gpt-4.1': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-4.1'} 
     },
-    'gpt-5.1': { 
+    'gpt-5.1': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-5.1'} 
     },
-    'gpt-5-mini': { 
+    'gpt-5-mini': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-5-mini'} 
     },
@@ -81,23 +81,30 @@ _llm_config_map = {
         'class': ChatGoogleGenerativeAI,
         'constructor_params': {'model': 'gemini-2.5-pro'}
     },
-    'llama3.2': { 
+    'llama3.2': {
         'class': ChatOllama,
         'constructor_params': {'model': 'llama3.2:latest', 'base_url': OLLAMA_BASE_URL}
     },
-    'llama3.1': { 
+    'llama3.1': {
         'class': ChatOllama,
         'constructor_params': {'model': 'llama3.1:latest', 'base_url': OLLAMA_BASE_URL}
     },
-    'gemma3': { 
+    'gemma3': {
         'class': ChatOllama,
         'constructor_params': {'model': 'gemma3:latest', 'base_url': OLLAMA_BASE_URL}
     },
-    'deepseek-r1': { 
+    'deepseek-r1': {
         'class': ChatOllama,
         'constructor_params': {'model': 'deepseek-r1:latest', 'base_url': OLLAMA_BASE_URL}
-    }
-    
+    },
+    'gpt-4o-mini-openrouter': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'openai/gpt-4o-mini',
+            'base_url': OPENROUTER_BASE_URL,
+            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
+    },
     # Add more models here easily:
     # 'mistral7b': {
     #     'class': ChatOllama,
