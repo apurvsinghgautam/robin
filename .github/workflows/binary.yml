@@ -77,7 +77,13 @@ jobs:
 
       - name: Build Binary
         run: |
-          pyinstaller --onefile --hidden-import=pydantic --hidden-import=pydantic-core --hidden-import=pydantic.deprecated.decorator --strip --noupx --name robin main.py
+          pyinstaller --onefile \
+           --hidden-import=pydantic \
+           --hidden-import=pydantic-core \
+           --hidden-import=pydantic.deprecated.decorator \
+           --hidden-import=backports \
+           --hidden-import=backports.tarfile \
+           --strip --noupx --name robin main.py
           
         
       - name: Archive Binary

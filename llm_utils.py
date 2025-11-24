@@ -81,30 +81,55 @@ _llm_config_map = {
         'class': ChatGoogleGenerativeAI,
         'constructor_params': {'model': 'gemini-2.5-pro', 'google_api_key': GOOGLE_API_KEY}
     },
-    'llama3.2': {
-        'class': ChatOllama,
-        'constructor_params': {'model': 'llama3.2:latest', 'base_url': OLLAMA_BASE_URL}
-    },
-    'llama3.1': {
-        'class': ChatOllama,
-        'constructor_params': {'model': 'llama3.1:latest', 'base_url': OLLAMA_BASE_URL}
-    },
-    'gemma3': {
-        'class': ChatOllama,
-        'constructor_params': {'model': 'gemma3:latest', 'base_url': OLLAMA_BASE_URL}
-    },
-    'deepseek-r1': {
-        'class': ChatOllama,
-        'constructor_params': {'model': 'deepseek-r1:latest', 'base_url': OLLAMA_BASE_URL}
-    },
-    'gpt-4o-mini-openrouter': {
+    'gpt-5.1-openrouter': {
         'class': ChatOpenAI,
         'constructor_params': {
-            'model_name': 'openai/gpt-4o-mini',
+            'model_name': 'openai/gpt-5.1',
             'base_url': OPENROUTER_BASE_URL,
             'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
         }
     },
+    'gpt-5-mini-openrouter': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'openai/gpt-5-mini',
+            'base_url': OPENROUTER_BASE_URL,
+            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
+    },
+    'claude-sonnet-4.5-openrouter': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'anthropic/claude-sonnet-4.5',
+            'base_url': OPENROUTER_BASE_URL,
+            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
+    },
+    'grok-4.1-fast-openrouter': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'x-ai/grok-4.1-fast',
+            'base_url': OPENROUTER_BASE_URL,
+            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
+    },
+    # 'llama3.2': {
+    #     'class': ChatOllama,
+    #     'constructor_params': {'model': 'llama3.2:latest', 'base_url': OLLAMA_BASE_URL}
+    # },
+    # 'llama3.1': {
+    #     'class': ChatOllama,
+    #     'constructor_params': {'model': 'llama3.1:latest', 'base_url': OLLAMA_BASE_URL}
+    # },
+    # 'gemma3': {
+    #     'class': ChatOllama,
+    #     'constructor_params': {'model': 'gemma3:latest', 'base_url': OLLAMA_BASE_URL}
+    # },
+    # 'deepseek-r1': {
+    #     'class': ChatOllama,
+    #     'constructor_params': {'model': 'deepseek-r1:latest', 'base_url': OLLAMA_BASE_URL}
+    # },
+    
     # Add more models here easily:
     # 'mistral7b': {
     #     'class': ChatOllama,
