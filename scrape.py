@@ -1,106 +1,145 @@
+"""
+Scraping module for extracting content from dark web pages via Tor.
+"""
+
+import logging
 import random
+from typing import Dict, List, Tuple, Any
+
 import requests
-import threading
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from requests.exceptions import RequestException, Timeout, ConnectionError
 
-import warnings
-warnings.filterwarnings("ignore")
+from constants import (
+    USER_AGENTS,
+    SCRAPE_TIMEOUT,
+    CLEARWEB_TIMEOUT,
+    MAX_SCRAPE_CHARS,
+    DEFAULT_MAX_WORKERS,
+    RETRY_TOTAL,
+    RETRY_READ,
+    RETRY_CONNECT,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_STATUS_FORCELIST,
+    get_tor_proxies,
+)
 
-# Define a list of rotating user agents.
-USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:137.0) Gecko/20100101 Firefox/137.0",
-    "Mozilla/5.0 (X11; Linux i686; rv:137.0) Gecko/20100101 Firefox/137.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.3179.54",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.3179.54"
-]
+logger = logging.getLogger(__name__)
 
-def get_tor_session():
+
+def get_tor_session() -> requests.Session:
     """
     Creates a requests Session with Tor SOCKS proxy and automatic retries.
+
+    Returns:
+        Configured requests.Session with Tor proxy and retry logic
     """
     session = requests.Session()
     retry = Retry(
-        total=3,
-        read=3,
-        connect=3,
-        backoff_factor=0.3,
-        status_forcelist=[500, 502, 503, 504]
+        total=RETRY_TOTAL,
+        read=RETRY_READ,
+        connect=RETRY_CONNECT,
+        backoff_factor=RETRY_BACKOFF_FACTOR,
+        status_forcelist=RETRY_STATUS_FORCELIST
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
-    
-    session.proxies = {
-        "http": "socks5h://127.0.0.1:9050",
-        "https": "socks5h://127.0.0.1:9050"
-    }
+    session.proxies = get_tor_proxies()
     return session
 
-def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, control_password=None):
+
+def scrape_single(url_data: Dict[str, str]) -> Tuple[str, str]:
     """
     Scrapes a single URL using a robust Tor session.
-    Returns a tuple (url, scraped_text).
+
+    Args:
+        url_data: Dictionary with 'link' and 'title' keys
+
+    Returns:
+        Tuple of (url, scraped_text)
     """
     url = url_data['link']
+    title = url_data.get('title', '')
     use_tor = ".onion" in url
-    
-    headers = {
-        "User-Agent": random.choice(USER_AGENTS)
-    }
-    
+
+    headers = {"User-Agent": random.choice(USER_AGENTS)}
+
     try:
         if use_tor:
             session = get_tor_session()
-            # Increased timeout for Tor latency
-            response = session.get(url, headers=headers, timeout=45)
+            response = session.get(url, headers=headers, timeout=SCRAPE_TIMEOUT)
         else:
-            # Fallback for clearweb if needed, though tool focuses on dark web
-            response = requests.get(url, headers=headers, timeout=30)
+            response = requests.get(url, headers=headers, timeout=CLEARWEB_TIMEOUT)
 
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            # Clean up text: remove scripts/styles
-            for script in soup(["script", "style"]):
-                script.extract()
-            text = soup.get_text(separator=' ')
-            # Normalize whitespace
-            text = ' '.join(text.split())
-            scraped_text = f"{url_data['title']} - {text}"
-        else:
-            scraped_text = url_data['title']
+        if response.status_code != 200:
+            logger.debug(f"Non-200 status code {response.status_code} from {url}")
+            return url, title
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Remove scripts and styles
+        for script in soup(["script", "style"]):
+            script.extract()
+
+        text = soup.get_text(separator=' ')
+        # Normalize whitespace
+        text = ' '.join(text.split())
+        scraped_text = f"{title} - {text}"
+
+        return url, scraped_text
+
+    except Timeout:
+        logger.debug(f"Timeout scraping {url}")
+        return url, title
+    except ConnectionError:
+        logger.debug(f"Connection error scraping {url}")
+        return url, title
+    except RequestException as e:
+        logger.debug(f"Request error scraping {url}: {e}")
+        return url, title
     except Exception as e:
-        # Return title only on failure, so we don't lose the reference
-        scraped_text = url_data['title']
-    
-    return url, scraped_text
+        logger.warning(f"Unexpected error scraping {url}: {e}")
+        return url, title
 
-def scrape_multiple(urls_data, max_workers=5):
+
+def scrape_multiple(
+    urls_data: List[Dict[str, str]],
+    max_workers: int = DEFAULT_MAX_WORKERS
+) -> Dict[str, str]:
     """
     Scrapes multiple URLs concurrently using a thread pool.
+
+    Args:
+        urls_data: List of dictionaries with 'link' and 'title' keys
+        max_workers: Maximum number of concurrent threads
+
+    Returns:
+        Dictionary mapping URLs to their scraped content
     """
-    results = {}
-    max_chars = 2000  # Increased limit slightly for better context
-    
+    results: Dict[str, str] = {}
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_url = {
             executor.submit(scrape_single, url_data): url_data
             for url_data in urls_data
         }
+
         for future in as_completed(future_to_url):
+            url_data = future_to_url[future]
             try:
                 url, content = future.result()
-                if len(content) > max_chars:
-                    content = content[:max_chars] + "...(truncated)"
+
+                if len(content) > MAX_SCRAPE_CHARS:
+                    content = content[:MAX_SCRAPE_CHARS] + "... (truncated)"
+
                 results[url] = content
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Error processing result for {url_data.get('link', 'unknown')}: {e}")
                 continue
-                
+
+    logger.info(f"Successfully scraped {len(results)} out of {len(urls_data)} URLs")
     return results
