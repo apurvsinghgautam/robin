@@ -10,3 +10,15 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL")
 OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+# ==============================
+# Local Model Settings
+# ==============================
+
+# If True → strict local mode
+LOCAL_ONLY = False
+
+# Default local backend provider
+LOCAL_BACKEND = "ollama"
+
+LOCAL_MODEL_NAME = "llama3.1:8b"
