@@ -75,7 +75,7 @@ robin cli --model gpt-4.1 --query "ransomware payments"
 
 ```bash
 pip install -r requirements.txt
-python main.py -m gpt-4.1 -q "ransomware payments" -t 12
+python main.py cli -m gpt-4.1 -q "ransomware payments" -t 12
 ```
 
 ---
