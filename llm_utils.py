@@ -6,7 +6,7 @@ from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.callbacks.base import BaseCallbackHandler
-from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY
+from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY
 
 
 class BufferedStreamingHandler(BaseCallbackHandler):
@@ -77,9 +77,9 @@ _llm_config_map = {
         'class': ChatGoogleGenerativeAI,
         'constructor_params': {'model': 'gemini-2.5-flash-lite', 'google_api_key': GOOGLE_API_KEY}
     },
-    'gemini-2.5-pro': {
+    'gemini-2.5-flash': {
         'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-pro', 'google_api_key': GOOGLE_API_KEY}
+        'constructor_params': {'model': 'gemini-2.5-flash', 'google_api_key': GOOGLE_API_KEY }
     },
     'gpt-5.1-openrouter': {
         'class': ChatOpenAI,
@@ -111,6 +111,30 @@ _llm_config_map = {
             'model_name': 'x-ai/grok-4.1-fast',
             'base_url': OPENROUTER_BASE_URL,
             'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
+    },
+    'groq-llama3-70b': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'llama-3.3-70b-versatile',
+            'base_url': 'https://api.groq.com/openai/v1',
+            'api_key': GROQ_API_KEY
+        }
+    },
+    'groq-mixtral': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'mixtral-8x7b-32768',
+            'base_url': 'https://api.groq.com/openai/v1',
+            'api_key': GROQ_API_KEY
+        }
+    },
+    'mistral-large': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'mistral-large-latest',
+            'base_url': 'https://api.mistral.ai/v1',
+            'api_key': MISTRAL_API_KEY
         }
     },
     # 'llama3.2': {

@@ -5,6 +5,7 @@ from datetime import datetime
 from scrape import scrape_multiple
 from search import get_search_results
 from llm import get_llm, refine_query, filter_results, generate_summary
+from swarm import run_swarm_investigation
 from llm_utils import get_model_choices
 
 MODEL_CHOICES = get_model_choices()
@@ -41,13 +42,24 @@ def robin():
     type=str,
     help="Filename to save the final intelligence summary. If not provided, a filename based on the current date and time is used.",
 )
-def cli(model, query, threads, output):
+@click.option(
+    "--swarm",
+    "-s",
+    is_flag=True,
+    help="Enable Swarm Mode: Uses Groq (Search), Gemini (Analyst), and Mistral (Profiler) for a multi-agent investigation.",
+)
+def cli(model, query, threads, output, swarm):
     """Run Robin in CLI mode.\n
     Example commands:\n
     - robin -m gpt4o -q "ransomware payments" -t 12\n
     - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename\n
     - robin -m llama3.1 -q "zero days"\n
+    - robin --swarm -q "target_email@example.com"
     """
+    if swarm:
+        run_swarm_investigation(query, threads=threads, output_prefix=output)
+        return
+
     llm = get_llm(model)
 
     # Show spinner while processing the query
