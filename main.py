@@ -6,6 +6,10 @@ from scrape import scrape_multiple
 from search import get_search_results
 from llm import get_llm, refine_query, filter_results, generate_summary
 from llm_utils import get_model_choices
+from logger_utils import get_logger
+
+# Initialize logger
+logger = get_logger()
 
 MODEL_CHOICES = get_model_choices()
 
@@ -48,23 +52,36 @@ def cli(model, query, threads, output):
     - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename\n
     - robin -m llama3.1 -q "zero days"\n
     """
+    logger.info(f"=== Starting CLI investigation: '{query}' ===")
+    logger.info(f"Model: {model}, Threads: {threads}")
+    
     llm = get_llm(model)
+    model_name = getattr(llm, "_robin_model_name", model)
 
     # Show spinner while processing the query
     with yaspin(text="Processing...", color="cyan") as sp:
-        refined_query = refine_query(llm, query)
+        logger.info("Stage 1/5: Refining query...")
+        refined_query = refine_query(llm, query, model_name=model_name)
+        click.echo(f"[INFO] Refined query: {refined_query}")
 
+        logger.info("Stage 2/5: Searching dark web...")
         search_results = get_search_results(
             refined_query.replace(" ", "+"), max_workers=threads
         )
+        click.echo(f"[INFO] Found {len(search_results)} search results")
 
-        search_filtered = filter_results(llm, refined_query, search_results)
+        logger.info("Stage 3/5: Filtering results...")
+        search_filtered = filter_results(llm, refined_query, search_results, model_name=model_name)
+        click.echo(f"[INFO] Filtered to {len(search_filtered)} results")
 
+        logger.info("Stage 4/5: Scraping content...")
         scraped_results = scrape_multiple(search_filtered, max_workers=threads)
+        click.echo(f"[INFO] Scraped {len(scraped_results)} pages")
         sp.ok("✔")
 
     # Generate the intelligence summary.
-    summary = generate_summary(llm, query, scraped_results)
+    logger.info("Stage 5/5: Generating summary...")
+    summary = generate_summary(llm, query, scraped_results, model_name=model_name)
 
     # Save or print the summary
     if not output:
@@ -76,6 +93,7 @@ def cli(model, query, threads, output):
     with open(filename, "w", encoding="utf-8") as f:
         f.write(summary)
         click.echo(f"\n\n[OUTPUT] Final intelligence summary saved to {filename}")
+    logger.info(f"=== Investigation completed. Summary saved to {filename} ===")
 
 
 @robin.command()
