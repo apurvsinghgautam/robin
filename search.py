@@ -2,9 +2,13 @@ import requests
 import random, re
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from logger_utils import get_logger
 
 import warnings
 warnings.filterwarnings("ignore")
+
+# Initialize logger
+logger = get_logger()
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
@@ -46,6 +50,7 @@ def get_tor_proxies():
 
 def fetch_search_results(endpoint, query):
     url = endpoint.format(query=query)
+    search_engine = url.split('.onion')[0].split('//')[-1][:20] if '.onion' in url else "unknown"
     headers = {
         "User-Agent": random.choice(USER_AGENTS)
     }
@@ -65,19 +70,30 @@ def fetch_search_results(endpoint, query):
                         links.append({"title": title, "link": link[0]})
                 except:
                     continue
+            logger.debug(f"Search engine '{search_engine}' returned {len(links)} results")
             return links
         else:
+            logger.warning(f"Search engine '{search_engine}' returned status {response.status_code}")
             return []
-    except:
+    except Exception as e:
+        logger.debug(f"Search engine '{search_engine}' failed: {str(e)}")
         return []
 
 def get_search_results(refined_query, max_workers=5):
+    logger.info(f"Searching dark web with query: '{refined_query}' across {len(SEARCH_ENGINE_ENDPOINTS)} engines")
     results = []
+    successful_engines = 0
+    failed_engines = 0
+    
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(fetch_search_results, endpoint, refined_query)
                    for endpoint in SEARCH_ENGINE_ENDPOINTS]
         for future in as_completed(futures):
             result_urls = future.result()
+            if result_urls:
+                successful_engines += 1
+            else:
+                failed_engines += 1
             results.extend(result_urls)
 
     # Deduplicate results based on the link.
@@ -88,4 +104,6 @@ def get_search_results(refined_query, max_workers=5):
         if link not in seen_links:
             seen_links.add(link)
             unique_results.append(res)
+    
+    logger.info(f"Search completed: {successful_engines} engines succeeded, {failed_engines} failed, {len(unique_results)} unique results")
     return unique_results
