@@ -4,12 +4,16 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from llm_utils import _common_llm_params, resolve_model_config, get_model_choices
 from config import OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY
+from logger_utils import get_logger
 import logging
 import re
 
 import warnings
 
 warnings.filterwarnings("ignore")
+
+# Initialize logger
+logger = get_logger()
 
 
 def get_llm(model_choice):
@@ -18,6 +22,7 @@ def get_llm(model_choice):
 
     if config is None:  # Extra error check
         supported_models = get_model_choices()
+        logger.error(f"Unsupported LLM model: '{model_choice}'. Supported: {', '.join(supported_models)}")
         raise ValueError(
             f"Unsupported LLM model: '{model_choice}'. "
             f"Supported models (case-insensitive match) are: {', '.join(supported_models)}"
@@ -32,12 +37,16 @@ def get_llm(model_choice):
     all_params = {**_common_llm_params, **model_specific_params}
 
     # Create the LLM instance using the gathered parameters
+    logger.info(f"Initializing LLM model: {model_choice} (Class: {llm_class.__name__})")
     llm_instance = llm_class(**all_params)
+    
+    # Store model name for logging
+    llm_instance._robin_model_name = model_choice
 
     return llm_instance
 
 
-def refine_query(llm, user_input):
+def refine_query(llm, user_input, model_name: str = "unknown"):
     system_prompt = """
     You are a Cybercrime Threat Intelligence Expert. Your task is to refine the provided user query that needs to be sent to darkweb search engines. 
     
@@ -49,15 +58,30 @@ def refine_query(llm, user_input):
 
     INPUT:
     """
+    
+    # Log API call with data preview
+    full_prompt = f"System: {system_prompt}\nUser: {user_input}"
+    logger.log_api_call(
+        model=model_name,
+        stage="Query Refinement",
+        prompt_type="refine_query",
+        data_preview=full_prompt,
+        data_length=len(full_prompt)
+    )
+    
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{query}")]
     )
     chain = prompt_template | llm | StrOutputParser()
-    return chain.invoke({"query": user_input})
+    logger.info(f"Refining query: '{user_input}'")
+    result = chain.invoke({"query": user_input})
+    logger.info(f"Refined query result: '{result}'")
+    return result
 
 
-def filter_results(llm, query, results):
+def filter_results(llm, query, results, model_name: str = "unknown"):
     if not results:
+        logger.info("No results to filter")
         return []
 
     system_prompt = """
@@ -71,6 +95,18 @@ def filter_results(llm, query, results):
     """
 
     final_str = _generate_final_string(results)
+    
+    # Log API call with data preview
+    full_prompt = f"System: {system_prompt}\nQuery: {query}\nResults: {final_str[:500]}..."
+    logger.log_api_call(
+        model=model_name,
+        stage="Result Filtering",
+        prompt_type="filter_results",
+        data_preview=full_prompt,
+        data_length=len(final_str)
+    )
+    
+    logger.info(f"Filtering {len(results)} results for query: '{query}'")
 
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{results}")]
@@ -78,6 +114,7 @@ def filter_results(llm, query, results):
     chain = prompt_template | llm | StrOutputParser()
     try:
         result_indices = chain.invoke({"query": query, "results": final_str})
+        logger.info(f"Filtering completed, received indices: {result_indices[:100]}")
     except openai.RateLimitError as e:
         print(
             f"Rate limit error: {e} \n Truncating to Web titles only with 30 characters"
@@ -102,15 +139,14 @@ def filter_results(llm, query, results):
     ]
 
     if not parsed_indices:
-        logging.warning(
-            "Unable to interpret LLM result selection ('%s'). "
-            "Defaulting to the top %s results.",
-            result_indices,
-            min(len(results), 20),
+        logger.warning(
+            f"Unable to interpret LLM result selection ('{result_indices}'). "
+            f"Defaulting to the top {min(len(results), 20)} results."
         )
         parsed_indices = list(range(1, min(len(results), 20) + 1))
 
     top_results = [results[i - 1] for i in parsed_indices[:20]]
+    logger.info(f"Selected {len(top_results)} filtered results")
 
     return top_results
 
@@ -153,7 +189,7 @@ def _generate_final_string(results, truncate=False):
     return "\n".join(s for s in final_str)
 
 
-def generate_summary(llm, query, content):
+def generate_summary(llm, query, content, model_name: str = "unknown"):
     system_prompt = """
     You are an Cybercrime Threat Intelligence Expert tasked with generating context-based technical investigative insights from dark web osint search engine results.
 
@@ -180,8 +216,25 @@ def generate_summary(llm, query, content):
 
     INPUT:
     """
+    
+    # Log API call with data preview
+    content_preview = str(content)[:500] if content else "No content"
+    full_prompt = f"System: {system_prompt}\nQuery: {query}\nContent: {content_preview}..."
+    content_length = len(str(content)) if content else 0
+    logger.log_api_call(
+        model=model_name,
+        stage="Summary Generation",
+        prompt_type="generate_summary",
+        data_preview=full_prompt,
+        data_length=content_length
+    )
+    
+    logger.info(f"Generating summary for query: '{query}' with {len(content) if isinstance(content, dict) else 'N/A'} content items")
+    
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{content}")]
     )
     chain = prompt_template | llm | StrOutputParser()
-    return chain.invoke({"query": query, "content": content})
+    result = chain.invoke({"query": query, "content": content})
+    logger.info(f"Summary generation completed, length: {len(result)} characters")
+    return result
