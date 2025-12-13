@@ -5,9 +5,13 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from logger_utils import get_logger
 
 import warnings
 warnings.filterwarnings("ignore")
+
+# Initialize logger
+logger = get_logger()
 
 # Define a list of rotating user agents.
 USER_AGENTS = [
@@ -74,11 +78,14 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
             # Normalize whitespace
             text = ' '.join(text.split())
             scraped_text = f"{url_data['title']} - {text}"
+            logger.debug(f"Successfully scraped: {url[:50]}... ({len(text)} chars)")
         else:
             scraped_text = url_data['title']
+            logger.warning(f"Failed to scrape {url[:50]}... (Status: {response.status_code})")
     except Exception as e:
         # Return title only on failure, so we don't lose the reference
         scraped_text = url_data['title']
+        logger.debug(f"Exception scraping {url[:50]}...: {str(e)}")
     
     return url, scraped_text
 
@@ -86,8 +93,11 @@ def scrape_multiple(urls_data, max_workers=5):
     """
     Scrapes multiple URLs concurrently using a thread pool.
     """
+    logger.info(f"Scraping {len(urls_data)} URLs with {max_workers} workers")
     results = {}
     max_chars = 2000  # Increased limit slightly for better context
+    successful = 0
+    failed = 0
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_url = {
@@ -100,7 +110,11 @@ def scrape_multiple(urls_data, max_workers=5):
                 if len(content) > max_chars:
                     content = content[:max_chars] + "...(truncated)"
                 results[url] = content
-            except Exception:
+                successful += 1
+            except Exception as e:
+                failed += 1
+                logger.debug(f"Failed to scrape URL: {str(e)}")
                 continue
-                
+    
+    logger.info(f"Scraping completed: {successful} succeeded, {failed} failed")
     return results

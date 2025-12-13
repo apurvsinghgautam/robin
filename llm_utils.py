@@ -156,31 +156,44 @@ def fetch_ollama_models() -> List[str]:
     """
     Retrieve the list of locally available Ollama models by querying the Ollama HTTP API.
     Returns an empty list if the API isn't reachable or the base URL is not defined.
+    Automatically detects models when they are installed.
     """
     base_url = _get_ollama_base_url()
     if not base_url:
         return []
 
     try:
-        resp = requests.get(urljoin(base_url, "api/tags"), timeout=3)
+        resp = requests.get(urljoin(base_url, "api/tags"), timeout=5)
         resp.raise_for_status()
         models = resp.json().get("models", [])
         available = []
         for m in models:
             name = m.get("name") or m.get("model")
             if name:
-                available.append(name)
-        return available
-    except (requests.RequestException, ValueError):
+                # Extract just the model name without tag (e.g., "llama3.2:latest" -> "llama3.2")
+                model_name = name.split(":")[0] if ":" in name else name
+                available.append(model_name)
+        return sorted(set(available))  # Remove duplicates and sort
+    except requests.exceptions.ConnectionError:
+        # Ollama not running or not accessible
+        return []
+    except (requests.RequestException, ValueError, KeyError) as e:
+        # Log error but don't crash
         return []
 
 
-def get_model_choices() -> List[str]:
+def get_model_choices(refresh_ollama: bool = True) -> List[str]:
     """
     Combine the statically configured cloud models with the locally available Ollama models.
+    Automatically detects and adds any newly installed Ollama models.
+    
+    Args:
+        refresh_ollama: If True, refresh the Ollama models list (default: True)
     """
     base_models = list(_llm_config_map.keys())
-    dynamic_models = fetch_ollama_models()
+    
+    # Fetch Ollama models (this will auto-detect any newly installed models)
+    dynamic_models = fetch_ollama_models() if refresh_ollama else []
 
     normalized = {_normalize_model_name(m): m for m in base_models}
     for dm in dynamic_models:
@@ -200,17 +213,30 @@ def resolve_model_config(model_choice: str):
     """
     Resolve a model choice (case-insensitive) to the corresponding configuration.
     Supports both the predefined remote models and any locally installed Ollama models.
+    Automatically detects Ollama models even if they were just installed.
     """
     model_choice_lower = _normalize_model_name(model_choice)
     config = _llm_config_map.get(model_choice_lower)
     if config:
         return config
 
+    # Check Ollama models (this will auto-detect newly installed models)
     for ollama_model in fetch_ollama_models():
-        if _normalize_model_name(ollama_model) == model_choice_lower:
+        ollama_model_lower = _normalize_model_name(ollama_model)
+        # Try exact match first
+        if ollama_model_lower == model_choice_lower:
+            # Use full model name with tag if available, otherwise just the name
+            full_model_name = ollama_model if ":" in ollama_model else f"{ollama_model}:latest"
             return {
                 "class": ChatOllama,
-                "constructor_params": {"model": ollama_model, "base_url": OLLAMA_BASE_URL},
+                "constructor_params": {"model": full_model_name, "base_url": OLLAMA_BASE_URL},
+            }
+        # Also try matching without tag
+        if ollama_model_lower.split(":")[0] == model_choice_lower:
+            full_model_name = ollama_model if ":" in ollama_model else f"{ollama_model}:latest"
+            return {
+                "class": ChatOllama,
+                "constructor_params": {"model": full_model_name, "base_url": OLLAMA_BASE_URL},
             }
 
     return None
