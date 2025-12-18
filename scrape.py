@@ -5,6 +5,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlparse
+import ipaddress
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -21,6 +23,55 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.3179.54",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.3179.54"
 ]
+
+def is_valid_url(url):
+    """
+    Validates a URL to prevent SSRF attacks.
+    Rejects URLs pointing to:
+    - Private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+    - Localhost/loopback addresses (127.0.0.0/8, ::1)
+    - Link-local addresses (169.254.0.0/16)
+    - Multicast addresses (224.0.0.0/4)
+    - Reserved/special addresses
+    - URLs without proper schemes
+    
+    Returns True if URL is safe, False otherwise.
+    """
+    try:
+        # Ensure URL has proper scheme
+        if not url or (not url.startswith('http://') and not url.startswith('https://')):
+            return False
+        
+        parsed = urlparse(url)
+        
+        # Check if URL has a scheme and netloc
+        if not parsed.scheme or not parsed.netloc:
+            return False
+        
+        # Only allow http and https
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        
+        # Extract hostname
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        
+        # Try to parse as IP address
+        try:
+            ip = ipaddress.ip_address(hostname)
+            # Reject private, loopback, link-local, multicast, and reserved IPs
+            if (ip.is_private or ip.is_loopback or ip.is_link_local or 
+                ip.is_multicast or ip.is_reserved):
+                return False
+        except ValueError:
+            # Not an IP address, check for localhost
+            if hostname.lower() in ('localhost', 'localhost.localdomain'):
+                return False
+        
+        return True
+    except Exception:
+        return False
 
 def get_tor_session():
     """
@@ -57,16 +108,36 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
     }
     
     try:
+        # Validate URL to prevent SSRF attacks (skip for .onion addresses)
+        if not use_tor and not is_valid_url(url):
+            return url, url_data['title']
+        
         if use_tor:
             session = get_tor_session()
             # Increased timeout for Tor latency
-            response = session.get(url, headers=headers, timeout=45)
+            # Use stream=True to prevent loading entire response into memory
+            response = session.get(url, headers=headers, timeout=45, stream=True)
         else:
             # Fallback for clearweb if needed, though tool focuses on dark web
-            response = requests.get(url, headers=headers, timeout=30)
+            # Use stream=True to prevent loading entire response into memory
+            response = requests.get(url, headers=headers, timeout=30, stream=True)
 
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
+            # Limit response body to 10MB to prevent memory exhaustion
+            max_content = 10 * 1024 * 1024
+            content_length = response.headers.get('content-length')
+            
+            if content_length and int(content_length) > max_content:
+                return url, url_data['title']
+            
+            # Read content with size limit
+            content = b''
+            for chunk in response.iter_content(chunk_size=8192):
+                content += chunk
+                if len(content) > max_content:
+                    return url, url_data['title']
+            
+            soup = BeautifulSoup(content, "html.parser")
             # Clean up text: remove scripts/styles
             for script in soup(["script", "style"]):
                 script.extract()
