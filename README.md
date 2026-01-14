@@ -17,6 +17,7 @@
 
 - ⚙️ **Modular Architecture** – Clean separation between search, scrape, and LLM workflows.
 - 🤖 **Multi-Model Support** – Easily switch between OpenAI, Claude, Gemini or local models like Ollama.
+- 🔐 **Google Pro OAuth** – Use your Google subscription for free Gemini access (no API key needed).
 - 💻 **CLI-First Design** – Built for terminal warriors and automation ninjas.
 - 🐳 **Docker-Ready** – Optional Docker deployment for clean, isolated usage.
 - 📝 **Custom Reporting** – Save investigation output to file for reporting or further analysis.
@@ -33,12 +34,14 @@
 
 ## Installation
 > [!NOTE]
-> The tool needs Tor to do the searches. You can install Tor using `apt install tor` on Linux/Windows(WSL) or `brew install tor` on Mac. Once installed, confirm if Tor is running in the background.
+> Robin requires Tor to search the dark web. You have two options:
+> - **Tor Browser** (recommended): Install and run [Tor Browser](https://www.torproject.org/download/). Robin uses port 9150 by default.
+> - **Tor Service**: Install via `apt install tor` (Linux/WSL) or `brew install tor` (Mac). Uses port 9050.
 
 > [!TIP]
-> You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
->
-> For Ollama, provide `http://host.docker.internal:11434` as `OLLAMA_BASE_URL` in your env if running using docker method or `http://127.0.0.1:11434` for other methods. You might need to serve Ollama on 0.0.0.0 depending on your OS. You can do by running `OLLAMA_HOST=0.0.0.0 ollama serve &` in your terminal.
+> **API Keys vs OAuth Authentication:**
+> - **API Keys**: Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY` in your `.env` file
+> - **Google Pro OAuth** (Free): Use your Google subscription without API keys. See [Google Pro Setup](#google-pro-oauth-setup) below.
 
 ### Docker (Web UI Mode) [Recommended]
 
@@ -80,28 +83,61 @@ python main.py cli -m gpt-4.1 -q "ransomware payments" -t 12
 
 ---
 
+## Google Pro OAuth Setup
+
+Use your Google subscription for free Gemini access without API keys.
+
+### 1. Add OAuth Credentials
+
+Add to your `.env` file:
+```bash
+GOOGLE_CLIENT_ID=your_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_oauth_client_secret
+```
+
+### 2. Authenticate
+
+**Via CLI:**
+```bash
+python main.py login    # Opens browser for Google OAuth
+python main.py status   # Check authentication status
+python main.py logout   # Clear cached credentials
+```
+
+**Via Web UI:**
+1. Run `streamlit run ui.py`
+2. Click "🔑 Login with Google" in the sidebar
+3. Complete the OAuth flow
+
+### 3. Use OAuth Models
+
+Once authenticated, select models like `gemini-3-flash` or `gemini-3-pro` in the UI/CLI.
+
+---
+
 ## Usage
 
 ```bash
 Robin: AI-Powered Dark Web OSINT Tool
 
-options:
-  -h, --help            show this help message and exit
-  --model {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}, -m {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}
-                        Select LLM model (e.g., gpt4o, claude sonnet 3.5, ollama models, gemini 2.5 flash)
-  --query QUERY, -q QUERY
-                        Dark web search query
-  --threads THREADS, -t THREADS
-                        Number of threads to use for scraping (Default: 5)
-  --output OUTPUT, -o OUTPUT
-                        Filename to save the final intelligence summary. If not provided, a filename based on the
-                        current date and time is used.
+Commands:
+  cli      Run Robin in CLI mode
+  ui       Run Robin in Web UI mode
+  login    Authenticate with Google for Pro subscription access
+  logout   Clear cached Google authentication
+  status   Check Google Pro authentication status
+
+CLI Options:
+  --model, -m    Select LLM model (gpt-4.1, claude-sonnet-4-0, gemini-3-flash, etc.)
+  --query, -q    Dark web search query
+  --threads, -t  Number of threads for scraping (Default: 5)
+  --output, -o   Filename for the intelligence summary
 
 Example commands:
- - robin -m gpt4.1 -q "ransomware payments" -t 12
- - robin --model gpt4.1 --query "sensitive credentials exposure" --threads 8 --output filename
- - robin -m llama3.1 -q "zero days"
- - robin -m gemini-2.5-flash -q "zero days"
+ - robin cli -m gpt-4.1 -q "ransomware payments" -t 12
+ - robin cli -m gemini-3-flash -q "zero days"
+ - robin login
+ - robin status
 ```
 
 ---

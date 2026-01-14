@@ -5,6 +5,7 @@ from scrape import scrape_multiple
 from search import get_search_results
 from llm_utils import BufferedStreamingHandler, get_model_choices
 from llm import get_llm, refine_query, filter_results, generate_summary
+from config import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 
 
 # Cache expensive backend calls
@@ -77,6 +78,93 @@ if any(name not in {"gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", 
     st.sidebar.caption("Locally detected Ollama models are automatically added to this list.")
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
 
+# --- Google Pro OAuth Section ---
+if GOOGLE_CLIENT_ID:
+    st.sidebar.divider()
+    st.sidebar.subheader("🔐 Google Pro Login")
+    
+    # Handle OAuth callback
+    query_params = st.query_params
+    if "code" in query_params and "oauth_token" not in st.session_state:
+        try:
+            from antigravity import exchange_code_for_tokens, get_user_info, save_credentials
+            from google.oauth2.credentials import Credentials
+            
+            # Get current URL for redirect
+            code = query_params["code"]
+            # Exchange code for tokens
+            tokens = exchange_code_for_tokens(code, redirect_uri="http://localhost:8501")
+            
+            # Store in session
+            st.session_state.oauth_token = tokens.get("access_token")
+            st.session_state.refresh_token = tokens.get("refresh_token")
+            
+            # Get user info
+            user_info = get_user_info(tokens.get("access_token"))
+            if user_info:
+                st.session_state.user_email = user_info.get("email", "Unknown")
+                st.session_state.user_name = user_info.get("name", "User")
+            
+            # Cache credentials for CLI usage too
+            creds = Credentials(
+                token=tokens.get("access_token"),
+                refresh_token=tokens.get("refresh_token"),
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=GOOGLE_CLIENT_ID,
+                client_secret=GOOGLE_CLIENT_SECRET,
+                scopes=[
+                    'https://www.googleapis.com/auth/cloud-platform',
+                    'https://www.googleapis.com/auth/userinfo.email',
+                    'https://www.googleapis.com/auth/userinfo.profile',
+                    'https://www.googleapis.com/auth/cclog',
+                    'https://www.googleapis.com/auth/experimentsandconfigs'
+                ]
+            )
+            save_credentials(creds)
+            
+            # Clear URL params and rerun
+            st.query_params.clear()
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"OAuth failed: {e}")
+    
+    # Display login status
+    if "oauth_token" in st.session_state:
+        st.sidebar.success(f"✅ {st.session_state.get('user_email', 'Authenticated')}")
+        if st.sidebar.button("Logout", key="logout_btn"):
+            # Clear session and cached credentials
+            try:
+                from antigravity import clear_credentials
+                clear_credentials()
+            except:
+                pass
+            for key in ["oauth_token", "refresh_token", "user_email", "user_name"]:
+                st.session_state.pop(key, None)
+            st.rerun()
+        st.sidebar.caption("Models ending in '-pro' use your Google subscription.")
+    else:
+        # Check if we have cached credentials
+        try:
+            from antigravity import is_authenticated, load_cached_credentials, get_user_info
+            if is_authenticated():
+                creds = load_cached_credentials()
+                st.session_state.oauth_token = creds.token
+                user_info = get_user_info(creds.token)
+                if user_info:
+                    st.session_state.user_email = user_info.get("email", "Authenticated")
+                st.rerun()
+        except:
+            pass
+        
+        # Show login button
+        try:
+            from antigravity import generate_auth_url
+            auth_url = generate_auth_url(redirect_uri="http://localhost:8501")
+            st.sidebar.markdown(f"[🔑 Login with Google]({auth_url})")
+            st.sidebar.caption("Use your Google Pro subscription for free Gemini access.")
+        except Exception as e:
+            st.sidebar.warning(f"OAuth not configured: {e}")
+
 
 # Main UI - logo and input
 _, logo_col, _ = st.columns(3)
@@ -105,6 +193,11 @@ summary_container_placeholder = st.empty()
 
 # Process the query
 if run_button and query:
+    # Check if OAuth model is selected but user is not authenticated
+    if model.endswith('-pro') and "oauth_token" not in st.session_state:
+        st.error("⚠️ **Authentication required!** You selected an OAuth model (`" + model + "`). Please login with Google first using the sidebar, or select a different model.")
+        st.stop()
+    
     # clear old state
     for k in ["refined", "results", "filtered", "scraped", "streamed_summary"]:
         st.session_state.pop(k, None)
