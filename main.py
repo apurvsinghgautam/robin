@@ -120,5 +120,107 @@ def ui(ui_port, ui_host):
     sys.exit(stcli.main())
 
 
+@robin.command()
+def login():
+    """Authenticate with Google for Pro subscription access.
+    
+    Opens a browser window for Google OAuth authentication.
+    Tokens are cached locally for future CLI and UI usage.
+    
+    Example:
+        robin login
+    """
+    try:
+        from antigravity import authenticate_cli, is_authenticated, get_user_info, load_cached_credentials
+        
+        if is_authenticated():
+            creds = load_cached_credentials()
+            user_info = get_user_info(creds.token)
+            email = user_info.get('email', 'Unknown') if user_info else 'Unknown'
+            click.echo(f"✅ Already authenticated as: {email}")
+            click.echo("Use 'robin logout' to sign out.")
+            return
+        
+        click.echo("🔐 Starting Google OAuth authentication...")
+        creds = authenticate_cli()
+        
+        if creds:
+            click.echo("\n✅ Authentication successful!")
+            click.echo("You can now use models ending in '-pro' (e.g., gemini-3-flash-pro)")
+            click.echo("\nExample:")
+            click.echo('  robin cli -m gemini-3-flash-pro -q "your query"')
+        else:
+            click.echo("❌ Authentication failed.")
+            
+    except ImportError as e:
+        click.echo(f"❌ OAuth dependencies not installed: {e}")
+        click.echo("Install with: pip install google-auth-oauthlib")
+    except Exception as e:
+        click.echo(f"❌ Authentication error: {e}")
+
+
+@robin.command()
+def logout():
+    """Clear cached Google authentication.
+    
+    Removes locally cached OAuth tokens.
+    
+    Example:
+        robin logout
+    """
+    try:
+        from antigravity import clear_credentials, is_authenticated
+        
+        if not is_authenticated():
+            click.echo("ℹ️  Not currently authenticated.")
+            return
+        
+        if clear_credentials():
+            click.echo("✅ Successfully logged out.")
+            click.echo("Use 'robin login' to authenticate again.")
+        else:
+            click.echo("ℹ️  No cached credentials found.")
+            
+    except ImportError as e:
+        click.echo(f"❌ OAuth module not available: {e}")
+    except Exception as e:
+        click.echo(f"❌ Logout error: {e}")
+
+
+@robin.command()
+def status():
+    """Check Google Pro authentication status.
+    
+    Shows current authentication state and user info.
+    
+    Example:
+        robin status
+    """
+    try:
+        from antigravity import is_authenticated, load_cached_credentials, get_user_info, TOKEN_CACHE_FILE
+        
+        if is_authenticated():
+            creds = load_cached_credentials()
+            user_info = get_user_info(creds.token)
+            
+            click.echo("🔐 Authentication Status: ✅ Authenticated")
+            if user_info:
+                click.echo(f"   Email: {user_info.get('email', 'Unknown')}")
+                click.echo(f"   Name: {user_info.get('name', 'Unknown')}")
+            click.echo(f"   Token cache: {TOKEN_CACHE_FILE}")
+            click.echo("\nAvailable OAuth models:")
+            for model in get_model_choices():
+                if model.endswith('-pro'):
+                    click.echo(f"   • {model}")
+        else:
+            click.echo("🔐 Authentication Status: ❌ Not authenticated")
+            click.echo("\nUse 'robin login' to authenticate with Google Pro subscription.")
+            
+    except ImportError as e:
+        click.echo(f"❌ OAuth module not available: {e}")
+    except Exception as e:
+        click.echo(f"❌ Status check error: {e}")
+
+
 if __name__ == "__main__":
     robin()

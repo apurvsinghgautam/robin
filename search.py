@@ -39,9 +39,31 @@ SEARCH_ENGINE_ENDPOINTS = [
 ]
 
 def get_tor_proxies():
+    """
+    Get Tor SOCKS proxy configuration.
+    Tries Tor Browser port (9150) first, then Tor Service port (9050).
+    """
+    import socket
+    
+    # Try Tor Browser port first (9150), then Tor Service (9050)
+    for port in [9150, 9050]:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', port))
+            sock.close()
+            if result == 0:
+                return {
+                    "http": f"socks5h://127.0.0.1:{port}",
+                    "https": f"socks5h://127.0.0.1:{port}"
+                }
+        except:
+            continue
+    
+    # Default to Tor Browser port if detection fails
     return {
-        "http": "socks5h://127.0.0.1:9050",
-        "https": "socks5h://127.0.0.1:9050"
+        "http": "socks5h://127.0.0.1:9150",
+        "https": "socks5h://127.0.0.1:9150"
     }
 
 def fetch_search_results(endpoint, query):

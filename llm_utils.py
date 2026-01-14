@@ -6,7 +6,7 @@ from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.callbacks.base import BaseCallbackHandler
-from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY
+from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY, GOOGLE_CLIENT_ID
 
 
 class BufferedStreamingHandler(BaseCallbackHandler):
@@ -141,6 +141,30 @@ _llm_config_map = {
     # }
 }
 
+# Google Pro (OAuth) models - added dynamically if OAuth is configured
+# These use Antigravity/Cloudcode API with user's Google Pro subscription
+def _get_antigravity_models() -> dict:
+    """Get Antigravity models if OAuth is configured."""
+    if not GOOGLE_CLIENT_ID:
+        return {}
+    
+    try:
+        from antigravity import ChatAntigravity, is_authenticated
+        
+        # Only show OAuth models if credentials are available
+        return {
+            'gemini-3-flash': {
+                'class': ChatAntigravity,
+                'constructor_params': {'model': 'gemini-3-flash-preview'}
+            },
+            'gemini-3-pro': {
+                'class': ChatAntigravity,
+                'constructor_params': {'model': 'gemini-3-pro-preview'}
+            },
+        }
+    except ImportError:
+        return {}
+
 
 def _normalize_model_name(name: str) -> str:
     return name.strip().lower()
@@ -177,35 +201,59 @@ def fetch_ollama_models() -> List[str]:
 
 def get_model_choices() -> List[str]:
     """
-    Combine the statically configured cloud models with the locally available Ollama models.
+    Combine the statically configured cloud models with the locally available Ollama models
+    and Antigravity OAuth models (if configured).
     """
     base_models = list(_llm_config_map.keys())
+    
+    # Add Antigravity OAuth models if configured
+    antigravity_models = _get_antigravity_models()
+    oauth_model_names = list(antigravity_models.keys())
+    
     dynamic_models = fetch_ollama_models()
 
     normalized = {_normalize_model_name(m): m for m in base_models}
+    
+    # Add OAuth models
+    for m in oauth_model_names:
+        key = _normalize_model_name(m)
+        if key not in normalized:
+            normalized[key] = m
+    
     for dm in dynamic_models:
         key = _normalize_model_name(dm)
         if key not in normalized:
             normalized[key] = dm
 
-    # Preserve the order: original base models first, then the dynamic ones in alphabetical order
+    # Preserve the order: original base models first, OAuth models, then dynamic ones
+    ordered_oauth = [name for name in oauth_model_names if name not in base_models]
     ordered_dynamic = sorted(
-        [name for key, name in normalized.items() if name not in base_models],
+        [name for key, name in normalized.items() if name not in base_models and name not in oauth_model_names],
         key=_normalize_model_name,
     )
-    return base_models + ordered_dynamic
+    return base_models + ordered_oauth + ordered_dynamic
 
 
 def resolve_model_config(model_choice: str):
     """
     Resolve a model choice (case-insensitive) to the corresponding configuration.
-    Supports both the predefined remote models and any locally installed Ollama models.
+    Supports predefined remote models, Antigravity OAuth models, and locally installed Ollama models.
     """
     model_choice_lower = _normalize_model_name(model_choice)
+    
+    # Check static config first
     config = _llm_config_map.get(model_choice_lower)
     if config:
         return config
+    
+    # Check Antigravity OAuth models
+    antigravity_models = _get_antigravity_models()
+    if model_choice_lower in {_normalize_model_name(k) for k in antigravity_models}:
+        for key, cfg in antigravity_models.items():
+            if _normalize_model_name(key) == model_choice_lower:
+                return cfg
 
+    # Check Ollama models
     for ollama_model in fetch_ollama_models():
         if _normalize_model_name(ollama_model) == model_choice_lower:
             return {

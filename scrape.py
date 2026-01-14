@@ -25,7 +25,10 @@ USER_AGENTS = [
 def get_tor_session():
     """
     Creates a requests Session with Tor SOCKS proxy and automatic retries.
+    Tries Tor Browser port (9150) first, then Tor Service port (9050).
     """
+    import socket
+    
     session = requests.Session()
     retry = Retry(
         total=3,
@@ -38,9 +41,23 @@ def get_tor_session():
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     
+    # Try Tor Browser port first (9150), then Tor Service (9050)
+    tor_port = 9150  # default
+    for port in [9150, 9050]:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('127.0.0.1', port))
+            sock.close()
+            if result == 0:
+                tor_port = port
+                break
+        except:
+            continue
+    
     session.proxies = {
-        "http": "socks5h://127.0.0.1:9050",
-        "https": "socks5h://127.0.0.1:9050"
+        "http": f"socks5h://127.0.0.1:{tor_port}",
+        "https": f"socks5h://127.0.0.1:{tor_port}"
     }
     return session
 
