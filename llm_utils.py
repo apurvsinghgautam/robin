@@ -6,7 +6,16 @@ from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.callbacks.base import BaseCallbackHandler
-from config import OLLAMA_BASE_URL, OPENROUTER_BASE_URL, OPENROUTER_API_KEY, GOOGLE_API_KEY
+import os
+from config import (
+    OLLAMA_BASE_URL,
+    OPENROUTER_BASE_URL,
+    OPENROUTER_API_KEY,
+    GOOGLE_API_KEY,
+    OPENAI_API_KEY,
+    ANTHROPIC_API_KEY,
+    LLAMA_CPP_BASE_URL,
+)
 
 
 class BufferedStreamingHandler(BaseCallbackHandler):
@@ -175,25 +184,96 @@ def fetch_ollama_models() -> List[str]:
         return []
 
 
+# Added Support for llama.cpp models since they use OpenAI-compatible API
+def fetch_llama_cpp_models() -> List[str]:
+    """
+    Retrieve available models from an OpenAI-compatible llama.cpp server.
+    Uses /v1/models.
+    """
+    if not LLAMA_CPP_BASE_URL:
+        return []
+
+    base = LLAMA_CPP_BASE_URL.rstrip("/")
+    try:
+        resp = requests.get(f"{base}/v1/models", timeout=3)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        return [m["id"] for m in data if "id" in m]
+    except (requests.RequestException, ValueError, KeyError):
+        return []
+
+
+
+def _is_set(v: Optional[str]) -> bool:
+    return bool(v and str(v).strip() and "your_" not in str(v))
+
+
+# Changed it so the GUI only loaded available models
 def get_model_choices() -> List[str]:
     """
-    Combine the statically configured cloud models with the locally available Ollama models.
+    Combine configured cloud models with locally available Ollama models.
+    Cloud models are shown only if required API keys are present.
     """
-    base_models = list(_llm_config_map.keys())
-    dynamic_models = fetch_ollama_models()
+    gated_base_models: List[str] = []
 
-    normalized = {_normalize_model_name(m): m for m in base_models}
+    openai_ok = _is_set(OPENAI_API_KEY)
+    anthropic_ok = _is_set(ANTHROPIC_API_KEY)
+    google_ok = _is_set(GOOGLE_API_KEY)
+    openrouter_ok = _is_set(OPENROUTER_API_KEY) and _is_set(OPENROUTER_BASE_URL)
+
+    for k, cfg in _llm_config_map.items():
+        cls = cfg.get("class")
+        ctor = cfg.get("constructor_params", {}) or {}
+
+        # OpenRouter models (ChatOpenAI with base_url set to OpenRouter)
+        if cls is ChatOpenAI and (ctor.get("base_url") == OPENROUTER_BASE_URL or "openrouter" in k):
+            if openrouter_ok:
+                gated_base_models.append(k)
+            continue
+
+        # Direct OpenAI models
+        if cls is ChatOpenAI:
+            if openai_ok:
+                gated_base_models.append(k)
+            continue
+
+        # Anthropic
+        if cls is ChatAnthropic:
+            if anthropic_ok:
+                gated_base_models.append(k)
+            continue
+
+        # Google Gemini
+        if cls is ChatGoogleGenerativeAI:
+            if google_ok:
+                gated_base_models.append(k)
+            continue
+
+        # Anything else: keep
+        gated_base_models.append(k)
+
+    # Local Models
+    dynamic_models = []
+
+    # Dynamic local models via Ollama-style API (/api/tags)
+    dynamic_models += fetch_ollama_models()
+
+    # Dynamic local models via llama.cpp which uses OpenAI style API
+    dynamic_models += fetch_llama_cpp_models()
+
+    normalized = {_normalize_model_name(m): m for m in gated_base_models}
     for dm in dynamic_models:
         key = _normalize_model_name(dm)
         if key not in normalized:
             normalized[key] = dm
 
-    # Preserve the order: original base models first, then the dynamic ones in alphabetical order
     ordered_dynamic = sorted(
-        [name for key, name in normalized.items() if name not in base_models],
+        [name for key, name in normalized.items() if name not in gated_base_models],
         key=_normalize_model_name,
     )
-    return base_models + ordered_dynamic
+    return gated_base_models + ordered_dynamic
+
+
 
 
 def resolve_model_config(model_choice: str):
@@ -205,6 +285,18 @@ def resolve_model_config(model_choice: str):
     config = _llm_config_map.get(model_choice_lower)
     if config:
         return config
+
+    # llama.cpp (OpenAI-compatible)
+    for llama_model in fetch_llama_cpp_models():
+        if _normalize_model_name(llama_model) == model_choice_lower:
+            return {
+                "class": ChatOpenAI,
+                "constructor_params": {
+                    "model_name": llama_model,
+                    "base_url": LLAMA_CPP_BASE_URL,
+                    "api_key": OPENAI_API_KEY or "sk-local",
+                },
+            }
 
     for ollama_model in fetch_ollama_models():
         if _normalize_model_name(ollama_model) == model_choice_lower:
