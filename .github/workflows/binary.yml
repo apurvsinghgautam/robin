@@ -45,10 +45,12 @@ jobs:
       - name: Create Release
         id: create_release
         run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+
           gh release create "${{ steps.version.outputs.new_version }}" \
             --title "Release ${{ steps.version.outputs.new_version }}" \
             --draft \
-            --notes "Release ${{ steps.version.outputs.new_version }}" \
+            --notes "$COMMIT_MSG" \
             --target ${{ github.sha }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -75,7 +77,13 @@ jobs:
 
       - name: Build Binary
         run: |
-          pyinstaller --onefile --hidden-import=pydantic --hidden-import=pydantic-core --hidden-import=pydantic.deprecated.decorator --strip --noupx --name robin main.py
+          pyinstaller --onefile \
+           --hidden-import=pydantic \
+           --hidden-import=pydantic-core \
+           --hidden-import=pydantic.deprecated.decorator \
+           --hidden-import=backports \
+           --hidden-import=backports.tarfile \
+           --strip --noupx --name robin main.py
           
         
       - name: Archive Binary

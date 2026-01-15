@@ -25,7 +25,7 @@ USER_AGENTS = [
 DEFAULT_SEARCH_ENGINES = [
     "http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/search/?q={query}", # Ahmia
     "http://3bbad7fauom4d6sgppalyqddsqbf5u5p56b5k5uk2zxsy3d6ey2jobad.onion/search?q={query}", # OnionLand
-    "http://darkhuntyla64h75a3re5e2l3367lqn7ltmdzpgmr6b4nbz3q2iaxrid.onion/search?q={query}", # DarkRunt
+    "http://darkhuntyla64h75a3re5e2l3367lqn7ltmdzpgmr6b4nbz3q2iaxrid.onion/search?q={query}", # DarkHunt
     "http://iy3544gmoeclh5de6gez2256v6pjh4omhpqdh2wpeeppjtvqmjhkfwad.onion/torgle/?query={query}", # Torgle
     "http://amnesia7u5odx5xbwtpnqk3edybgud5bmiagu75bnqx2crntw5kry7ad.onion/search?query={query}", # Amnesia
     "http://kaizerwfvp5gxu6cppibp7jhcqptavq3iqef66wbxenh6a2fklibdvid.onion/search?q={query}", # Kaizer
@@ -38,21 +38,9 @@ DEFAULT_SEARCH_ENGINES = [
     "http://oniwayzz74cv2puhsgx4dpjwieww4wdphsydqvf5q7eyz4myjvyw26ad.onion/search.php?s={query}", # Onionway
     "http://tor66sewebgixwhcqfnp5inzp5x5uohhdy3kvtnyfxc2e5mxiuh34iid.onion/search?q={query}", # Tor66
     "http://3fzh7yuupdfyjhwt3ugzqqof6ulbcl27ecev33knxe3u7goi3vfn2qqd.onion/oss/index.php?search={query}", # OSS
+    "http://torgolnpeouim56dykfob6jh5r2ps2j73enc42s2um4ufob3ny4fcdyd.onion/?q={query}", # Torgol
+    "http://searchgf7gdtauh7bhnbyed4ivxqmuoat3nm6zfrg3ymkq6mtnpye3ad.onion/search?q={query}" # The Deep Searches
 ]
-
-def load_search_engines():
-    """
-    Loads search engines from engines.json if available, otherwise uses default.
-    """
-    if os.path.exists("engines.json"):
-        try:
-            with open("engines.json", "r") as f:
-                engines = json.load(f)
-                if isinstance(engines, list) and len(engines) > 0:
-                    return engines
-        except Exception:
-            pass 
-    return DEFAULT_SEARCH_ENGINES
 
 def get_tor_session():
     session = requests.Session()
@@ -102,12 +90,10 @@ def fetch_search_results(endpoint, query):
         return []
 
 def get_search_results(refined_query, max_workers=5):
-    endpoints = load_search_engines()
     results = []
-    
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(fetch_search_results, endpoint, refined_query)
-                   for endpoint in endpoints]
+                   for endpoint in DEFAULT_SEARCH_ENGINES]
         for future in as_completed(futures):
             result_urls = future.result()
             results.extend(result_urls)

@@ -9,7 +9,7 @@
 
 ![Demo](.github/assets/screen.png)
 ![Demo](.github/assets/screen-ui.png)
-
+![Workflow](.github/assets/robin-workflow.png)
 
 ---
 
@@ -38,10 +38,16 @@
 > [!TIP]
 > You can provide OpenAI or Anthropic or Google API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
 >
-> For Ollama, provide `http://host.docker.internal:11434` as `OLLAMA_BASE_URL` in your env if running using docker method or `http://127.0.0.1:11434` for other methods. You might need to serve Ollama on 0.0.0.0 depending on your OS. You can do that using `OLLAMA_HOST=0.0.0.0 ollama serve &`.
+> For Ollama, provide `http://host.docker.internal:11434` as `OLLAMA_BASE_URL` in your env if running using docker method or `http://127.0.0.1:11434` for other methods. You might need to serve Ollama on 0.0.0.0 depending on your OS. You can do by running `OLLAMA_HOST=0.0.0.0 ollama serve &` in your terminal.
 
 ### Docker (Web UI Mode) [Recommended]
 
+- Pull the latest Robin docker image
+```bash
+docker pull apurvsg/robin:latest
+```
+
+- Run the docker image as:
 ```bash
 docker run --rm \
    -v "$(pwd)/.env:/app/.env" \
@@ -69,7 +75,7 @@ robin cli --model gpt-4.1 --query "ransomware payments"
 
 ```bash
 pip install -r requirements.txt
-python main.py -m gpt-4.1 -q "ransomware payments" -t 12
+python main.py cli -m gpt-4.1 -q "ransomware payments" -t 12
 ```
 
 ---
@@ -92,8 +98,8 @@ options:
                         current date and time is used.
 
 Example commands:
- - robin -m gpt4o -q "ransomware payments" -t 12
- - robin --model claude-3-5-sonnet-latest --query "sensitive credentials exposure" --threads 8 --output filename
+ - robin -m gpt4.1 -q "ransomware payments" -t 12
+ - robin --model gpt4.1 --query "sensitive credentials exposure" --threads 8 --output filename
  - robin -m llama3.1 -q "zero days"
  - robin -m gemini-2.5-flash -q "zero days"
 ```
@@ -102,7 +108,7 @@ Example commands:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request if you have major feature updates.
 
 - Fork the repository
 - Create your feature branch (git checkout -b feature/amazing-feature)
@@ -114,6 +120,7 @@ Open an Issue for any of these situations:
 - If you spot a bug or bad code
 - If you have a feature request idea
 - If you have questions or doubts about usage
+- If you have minor code changes
 
 ---
 
@@ -123,4 +130,9 @@ Open an Issue for any of these situations:
 - Tools inspiration from my [OSINT Tools for the Dark Web](https://github.com/apurvsinghgautam/dark-web-osint-tools) repository.
 - LLM Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
 - Logo Design by my friend [Tanishq Rupaal](https://github.com/Tanq16/)
+- Workflow Design by [Chintan Gurjar](https://www.linkedin.com/in/chintangurjar)
+
+
+
+
 
