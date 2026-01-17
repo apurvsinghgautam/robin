@@ -78,7 +78,8 @@ def refine_query(llm, user_input):
     1. Analyze the user query and think about how it can be improved to use as search engine query
     2. Refine the user query by adding or removing words so that it returns the best result from dark web search engines
     3. Don't use any logical operators (AND, OR, etc.)
-    4. Output just the user query and nothing else
+    4. Keep the final refined query limited to 5 words or less
+    5. Output just the user query and nothing else
 
     INPUT:
     """

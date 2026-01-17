@@ -58,6 +58,10 @@ _llm_config_map = {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-4.1'} 
     },
+    'gpt-5.2': {
+        'class': ChatOpenAI,
+        'constructor_params': {'model_name': 'gpt-5.2'} 
+    },
     'gpt-5.1': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-5.1'} 
@@ -89,6 +93,30 @@ _llm_config_map = {
     'gemini-2.5-pro': {
         'class': ChatGoogleGenerativeAI,
         'constructor_params': {'model': 'gemini-2.5-pro', 'google_api_key': GOOGLE_API_KEY}
+    },
+    'qwen3-80b-openrouter': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'qwen/qwen3-next-80b-a3b-instruct:free',
+            'base_url': OPENROUTER_BASE_URL,
+            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
+    },
+    'nemotron-nano-9b-openrouter': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'nvidia/nemotron-nano-9b-v2:free',
+            'base_url': OPENROUTER_BASE_URL,
+            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
+    },
+    'gpt-oss-120b-openrouter': {
+        'class': ChatOpenAI,
+        'constructor_params': {
+            'model_name': 'openai/gpt-oss-120b:free',
+            'base_url': OPENROUTER_BASE_URL,
+            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
+        }
     },
     'gpt-5.1-openrouter': {
         'class': ChatOpenAI,

@@ -21,7 +21,7 @@ def robin():
     default="gpt-5-mini",
     show_default=True,
     type=click.Choice(MODEL_CHOICES),
-    help="Select LLM model to use (e.g., gpt4o, claude sonnet 3.5, ollama models)",
+    help="Select LLM model to use (e.g., ChatGPT models, Claude models, Gemini models, Ollama models, Openrouter models)",
 )
 @click.option("--query", "-q", required=True, type=str, help="Dark web search query")
 @click.option("--threads", "-t", default=5, show_default=True, type=int, help="Number of threads (Default: 5)")
