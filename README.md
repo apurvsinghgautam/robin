@@ -80,7 +80,7 @@ python main.py cli -m gpt-4.1 -q "ransomware payments" -t 12
 
 ---
 
-## Usage
+## Usage (CLI/Development Mode)
 
 ```bash
 Robin: AI-Powered Dark Web OSINT Tool
