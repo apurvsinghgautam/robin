@@ -87,8 +87,8 @@ Robin: AI-Powered Dark Web OSINT Tool
 
 options:
   -h, --help            show this help message and exit
-  --model {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}, -m {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}
-                        Select LLM model (e.g., gpt4o, claude sonnet 3.5, ollama models, gemini 2.5 flash)
+  --model {gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}, -m {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}
+                        Select LLM model (e.g., gpt4.1, claude sonnet 3.5, ollama models, gemini 2.5 flash)
   --query QUERY, -q QUERY
                         Dark web search query
   --threads THREADS, -t THREADS
