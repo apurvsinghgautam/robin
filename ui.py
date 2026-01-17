@@ -1,3 +1,4 @@
+
 import base64
 import streamlit as st
 from datetime import datetime
@@ -5,6 +6,34 @@ from scrape import scrape_multiple
 from search import get_search_results
 from llm_utils import BufferedStreamingHandler, get_model_choices
 from llm import get_llm, refine_query, filter_results, generate_summary
+
+
+def _render_pipeline_error(stage: str, err: Exception) -> None:
+    message = str(err).strip() or err.__class__.__name__
+    lower_msg = message.lower()
+    hints = [
+        "- Confirm the relevant API key is set in your `.env` or shell before launching Streamlit.",
+        "- Keys copied from dashboards often include hidden spaces; re-copy if authentication keeps failing.",
+        "- Restart the app after updating environment variables so the new values are picked up.",
+    ]
+
+    if any(token in lower_msg for token in ("anthropic", "x-api-key", "invalid api key", "authentication")):
+        hints.insert(0, "- Claude/Anthropic models require a valid `ANTHROPIC_API_KEY`.")
+    elif "openrouter" in lower_msg:
+        hints.insert(0, "- OpenRouter models require `OPENROUTER_API_KEY` and a reachable OpenRouter endpoint.")
+    elif "openai" in lower_msg or "gpt" in lower_msg:
+        hints.insert(0, "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.")
+    elif "google" in lower_msg or "gemini" in lower_msg:
+        hints.insert(0, "- Google Gemini models need `GOOGLE_API_KEY` or Application Default Credentials.")
+
+    st.error(
+        "❌ Failed to {}.\n\nError: {}\n\n{}".format(
+            stage,
+            message,
+            "\n".join(hints),
+        )
+    )
+    st.stop()
 
 
 # Cache expensive backend calls
@@ -112,12 +141,18 @@ if run_button and query:
     # Stage 1 - Load LLM
     with status_slot.container():
         with st.spinner("🔄 Loading LLM..."):
-            llm = get_llm(model)
+            try:
+                llm = get_llm(model)
+            except Exception as e:
+                _render_pipeline_error("load the selected LLM", e)
 
     # Stage 2 - Refine query
     with status_slot.container():
         with st.spinner("🔄 Refining query..."):
-            st.session_state.refined = refine_query(llm, query)
+            try:
+                st.session_state.refined = refine_query(llm, query)
+            except Exception as e:
+                _render_pipeline_error("refine the query", e)
     p1.container(border=True).markdown(
         f"<div class='colHeight'><p class='pTitle'>Refined Query</p><p>{st.session_state.refined}</p></div>",
         unsafe_allow_html=True,

@@ -3,7 +3,12 @@ import openai
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from llm_utils import _common_llm_params, resolve_model_config, get_model_choices
-from config import OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY
+from config import (
+    OPENAI_API_KEY,
+    ANTHROPIC_API_KEY,
+    GOOGLE_API_KEY,
+    OPENROUTER_API_KEY,
+)
 import logging
 import re
 
@@ -31,10 +36,38 @@ def get_llm(model_choice):
     # Model-specific parameters will override common ones if there are any conflicts
     all_params = {**_common_llm_params, **model_specific_params}
 
+    # Validate that the required credentials exist before we hit the API
+    _ensure_credentials(model_choice, llm_class, model_specific_params)
+
     # Create the LLM instance using the gathered parameters
     llm_instance = llm_class(**all_params)
 
     return llm_instance
+
+
+def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> None:
+    """Raise a clear error if the user selects a hosted model without a key."""
+
+    def _require(key_value, env_var, provider_name):
+        if key_value:
+            return
+        raise ValueError(
+            f"{provider_name} model '{model_choice}' selected but `{env_var}` is not set.\n"
+            "Add it to your .env file or export it before running the app."
+        )
+
+    class_name = getattr(llm_class, "__name__", str(llm_class))
+
+    if "ChatAnthropic" in class_name:
+        _require(ANTHROPIC_API_KEY, "ANTHROPIC_API_KEY", "Anthropic")
+    elif "ChatGoogleGenerativeAI" in class_name:
+        _require(GOOGLE_API_KEY, "GOOGLE_API_KEY", "Google Gemini")
+    elif "ChatOpenAI" in class_name:
+        base_url = (model_params or {}).get("base_url", "").lower()
+        if "openrouter" in base_url:
+            _require(OPENROUTER_API_KEY, "OPENROUTER_API_KEY", "OpenRouter")
+        else:
+            _require(OPENAI_API_KEY, "OPENAI_API_KEY", "OpenAI")
 
 
 def refine_query(llm, user_input):
