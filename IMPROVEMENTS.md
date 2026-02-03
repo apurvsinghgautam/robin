@@ -174,6 +174,7 @@ python main.py cli -q "credential dumps" -o report.md
 1. **Vulnerability Fixes:**
    - Updated fastapi from 0.109.0 to 0.109.1 (ReDoS fix)
    - Updated python-multipart from 0.0.6 to 0.0.22 (multiple vulnerabilities)
+   - Updated Next.js from 14.1.0 to 14.2.35 (fixes DoS, authorization bypass, cache poisoning, and SSRF vulnerabilities)
 
 2. **Docker Security:**
    - Services exposed only on localhost
