@@ -1,106 +1,124 @@
-import sys
+"""Robin: AI-Powered Dark Web OSINT Tool - Main CLI entry point."""
+import asyncio
 import click
-from yaspin import yaspin
 from datetime import datetime
-from scrape import scrape_multiple
-from search import get_search_results
-from llm import get_llm, refine_query, filter_results, generate_summary
-from llm_utils import get_model_choices
 
-MODEL_CHOICES = get_model_choices()
+from config import DEFAULT_MODEL
+
 
 @click.group()
 @click.version_option()
 def robin():
-    """Robin: AI-Powered Dark Web OSINT Tool."""
+    """Robin: AI-Powered Dark Web OSINT Tool using Claude Agent SDK."""
     pass
+
 
 @robin.command()
 @click.option(
-    "--model", "-m",
-    default="gpt-5-mini",
-    show_default=True,
-    type=click.Choice(MODEL_CHOICES),
-    help="Select LLM model to use (e.g., ChatGPT models, Claude models, Gemini models, Ollama models, Openrouter models)",
+    "--query", "-q",
+    required=True,
+    type=str,
+    help="Dark web investigation query",
 )
-@click.option("--query", "-q", required=True, type=str, help="Dark web search query")
-@click.option("--threads", "-t", default=5, show_default=True, type=int, help="Number of threads (Default: 5)")
-@click.option("--output", "-o", type=str, help="Filename to save the final summary.")
-def cli(model, query, threads, output):
-    """Run Robin in CLI mode."""
-    try:
-        llm = get_llm(model)
+@click.option(
+    "--output", "-o",
+    type=str,
+    help="Filename to save the report. If not provided, auto-generated.",
+)
+@click.option(
+    "--interactive", "-i",
+    is_flag=True,
+    default=False,
+    help="Enable interactive mode for follow-up queries",
+)
+@click.option(
+    "--model", "-m",
+    default=DEFAULT_MODEL,
+    show_default=True,
+    type=str,
+    help="Claude model to use",
+)
+def cli(query: str, output: str, interactive: bool, model: str):
+    """Run Robin in CLI mode.
 
-        # Show spinner while processing
-        with yaspin(text="Processing...", color="cyan") as sp:
-            sp.write(f"🔹 Initializing with model: {model}")
-            
-            refined_query = refine_query(llm, query)
-            sp.write(f"🔹 Refined Query: {refined_query}")
+    Examples:
+    \b
+      robin cli -q "ransomware payments"
+      robin cli -q "threat actor APT28" -o report
+      robin cli -q "credential leaks" --interactive
+    """
+    asyncio.run(_run_cli(query, output, interactive, model))
 
-            search_results = get_search_results(refined_query, max_workers=threads)
-            if not search_results:
-                sp.fail("✖")
-                click.echo("\n[ERROR] No search results found. Tor may be unstable or query returned 0 hits.")
-                return
 
-            sp.write(f"🔹 Found {len(search_results)} raw results. Filtering...")
-            search_filtered = filter_results(llm, refined_query, search_results)
-            
-            sp.write(f"🔹 Scraping {len(search_filtered)} relevant sites...")
-            scraped_results = scrape_multiple(search_filtered, max_workers=threads)
-            
-            if not scraped_results:
-                sp.fail("✖")
-                click.echo("\n[ERROR] Failed to scrape any content. Check Tor connection.")
-                return
-                
-            sp.ok("✔")
+async def _run_cli(query: str, output: str, interactive: bool, model: str):
+    """Async CLI implementation."""
+    from agent import RobinAgent, InvestigationResult
 
-        # Generate summary
-        click.echo("\n🔹 Generating Intelligence Summary...")
-        summary = generate_summary(llm, query, scraped_results)
+    # Track tool usage for display
+    tool_calls = []
 
-        # Save output
+    def on_tool_use(name: str, input_data: dict):
+        tool_calls.append(name)
+        click.echo(f"\n  [Tool] {name}", nl=False)
+
+    def on_text(text: str):
+        # Stream text to terminal
+        click.echo(text, nl=False)
+
+    def on_complete(result: InvestigationResult):
+        click.echo(f"\n\n[Completed] {result.num_turns or 'N/A'} turns, "
+                   f"{len(result.tools_used)} tools used")
+
+    agent = RobinAgent(
+        on_text=on_text,
+        on_tool_use=on_tool_use,
+        on_complete=on_complete,
+        model=model,
+    )
+
+    click.echo(f"\n{'='*60}")
+    click.echo("Robin - Dark Web OSINT Agent")
+    click.echo(f"{'='*60}")
+    click.echo(f"\nQuery: {query}\n")
+
+    # Run initial investigation
+    full_response = ""
+    async for chunk in agent.investigate(query):
+        full_response += chunk
+
+    # Save report if output specified or auto-generate
+    if output or not interactive:
         if not output:
             now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            filename = f"summary_{now}.md"
-        else:
-            filename = output + ".md"
+            output = f"robin_report_{now}"
+
+        filename = output if output.endswith(".md") else f"{output}.md"
 
         with open(filename, "w", encoding="utf-8") as f:
-            f.write(summary)
-            click.echo(f"\n[OUTPUT] Final intelligence summary saved to {filename}")
+            f.write(full_response)
 
-    except KeyboardInterrupt:
-        click.echo("\n\n[!] Operation cancelled by user. Exiting.")
-        sys.exit(0)
-    except Exception as e:
-        click.echo(f"\n[ERROR] An unexpected error occurred: {e}")
-        sys.exit(1)
+        click.echo(f"\n[Saved] Report saved to {filename}")
 
+    # Interactive mode for follow-ups
+    if interactive:
+        click.echo("\n" + "="*60)
+        click.echo("Interactive Mode - Enter follow-up queries (Ctrl+C to exit)")
+        click.echo("="*60)
 
-@robin.command()
-@click.option("--ui-port", default=8501, show_default=True, type=int, help="Port for Streamlit UI")
-@click.option("--ui-host", default="localhost", show_default=True, type=str, help="Host for Streamlit UI")
-def ui(ui_port, ui_host):
-    """Run Robin in Web UI mode."""
-    import sys, os
-    from streamlit.web import cli as stcli
+        while True:
+            try:
+                follow_up = click.prompt("\nFollow-up", type=str)
+                if follow_up.lower() in ("exit", "quit", "q"):
+                    break
 
-    if getattr(sys, "frozen", False):
-        base = sys._MEIPASS
-    else:
-        base = os.path.dirname(__file__)
+                click.echo()
+                async for chunk in agent.follow_up(follow_up):
+                    pass  # on_text callback handles output
 
-    ui_script = os.path.join(base, "ui.py")
-    sys.argv = [
-        "streamlit", "run", ui_script,
-        f"--server.port={ui_port}",
-        f"--server.address={ui_host}",
-        "--global.developmentMode=false",
-    ]
-    sys.exit(stcli.main())
+            except (KeyboardInterrupt, EOFError):
+                click.echo("\n\nExiting interactive mode.")
+                break
+
 
 if __name__ == "__main__":
     robin()

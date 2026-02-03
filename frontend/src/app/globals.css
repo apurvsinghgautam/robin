@@ -1,0 +1,302 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 160 84% 39%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 5.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 5.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 160 84% 39%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Custom scrollbar for dark theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+}
+
+@layer components {
+  /* Threat type badge styles */
+  .badge-threat-actor {
+    @apply bg-red-500/10 text-red-400 border-red-500/20;
+  }
+
+  .badge-threat-ioc {
+    @apply bg-blue-500/10 text-blue-400 border-blue-500/20;
+  }
+
+  .badge-threat-malware {
+    @apply bg-orange-500/10 text-orange-400 border-orange-500/20;
+  }
+
+  .badge-threat-marketplace {
+    @apply bg-violet-500/10 text-violet-400 border-violet-500/20;
+  }
+
+  .badge-threat-vulnerability {
+    @apply bg-yellow-500/10 text-yellow-400 border-yellow-500/20;
+  }
+
+  .badge-threat-infrastructure {
+    @apply bg-cyan-500/10 text-cyan-400 border-cyan-500/20;
+  }
+
+  /* Streaming text animation */
+  .streaming-cursor::after {
+    content: '|';
+    @apply animate-pulse-slow text-primary;
+  }
+
+  /* Glass effect for cards */
+  .glass {
+    @apply bg-card/50 backdrop-blur-sm border border-border/50;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent;
+  }
+
+  /* Tool execution indicator */
+  .tool-indicator {
+    @apply flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50 text-sm;
+  }
+
+  .tool-indicator-active {
+    @apply border-l-2 border-primary animate-pulse-slow;
+  }
+
+  .tool-indicator-complete {
+    @apply border-l-2 border-emerald-500;
+  }
+
+  .tool-indicator-error {
+    @apply border-l-2 border-destructive;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar while keeping functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Text balance for headings */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Animation delay utilities */
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+}
+
+/* Markdown Content Styles */
+.markdown-content {
+  @apply text-sm leading-relaxed;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Long text handling for crypto addresses, URLs, hashes, etc. */
+.markdown-content p,
+.markdown-content li,
+.markdown-content td,
+.markdown-content code {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Headers */
+.markdown-content .md-h1 {
+  @apply text-xl font-bold text-foreground mt-5 mb-3 first:mt-0;
+}
+
+.markdown-content .md-h2 {
+  @apply text-lg font-semibold text-foreground mt-5 mb-2 first:mt-0;
+}
+
+.markdown-content .md-h3 {
+  @apply text-base font-semibold text-foreground mt-4 mb-2 first:mt-0;
+}
+
+.markdown-content .md-h4 {
+  @apply text-sm font-semibold text-foreground mt-3 mb-2 first:mt-0;
+}
+
+/* Paragraphs */
+.markdown-content .md-p {
+  @apply text-foreground my-2 first:mt-0 last:mb-0;
+}
+
+/* Bold and Italic */
+.markdown-content .md-bold {
+  @apply font-semibold text-foreground;
+}
+
+.markdown-content .md-italic {
+  @apply italic;
+}
+
+/* Links */
+.markdown-content .md-link {
+  @apply text-primary hover:underline transition-colors;
+}
+
+/* Code blocks */
+.markdown-content .md-code-block {
+  @apply bg-zinc-900 border border-zinc-700 rounded-lg p-4 my-3 overflow-x-auto;
+}
+
+.markdown-content .md-code {
+  @apply text-sm text-zinc-300 font-mono whitespace-pre;
+}
+
+/* Inline code */
+.markdown-content .md-inline-code {
+  @apply bg-zinc-800/80 text-emerald-400 px-1.5 py-0.5 rounded text-[0.85em] font-mono;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+/* Lists */
+.markdown-content .md-ul {
+  @apply my-2 pl-5 space-y-1.5;
+}
+
+.markdown-content .md-ol {
+  @apply my-2 pl-5 space-y-1.5;
+}
+
+.markdown-content .md-ul-item {
+  @apply text-foreground list-disc pl-1;
+}
+
+.markdown-content .md-ol-item {
+  @apply text-foreground list-decimal pl-1;
+}
+
+/* Tables */
+.markdown-content .md-table-wrapper {
+  @apply overflow-x-auto my-3 rounded-lg border border-zinc-700;
+}
+
+.markdown-content .md-table {
+  @apply w-full text-sm border-collapse;
+}
+
+.markdown-content .md-tr {
+  @apply border-b border-zinc-700 last:border-b-0;
+}
+
+.markdown-content .md-td {
+  @apply px-3 py-2 text-left;
+}
+
+.markdown-content .md-tr:first-child .md-td {
+  @apply font-semibold bg-zinc-800/50;
+}
+
+/* Blockquotes */
+.markdown-content .md-blockquote {
+  @apply border-l-4 border-primary/50 pl-4 py-1 my-3 text-muted-foreground italic bg-muted/30 rounded-r-md;
+}
+
+/* Horizontal rules */
+.markdown-content .md-hr {
+  @apply border-zinc-700 my-5;
+}
+
+/* Streaming cursor animation */
+@keyframes cursor-blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.animate-blink {
+  animation: cursor-blink 1s ease-in-out infinite;
+}

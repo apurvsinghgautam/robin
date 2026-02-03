@@ -1,12 +1,17 @@
+# Core agent SDK
+anthropic>=0.39.0
+
+# Dark web scraping and search  
 bs4
 yaspin
 pysocks
-requests
+requests[socks]
+
+# CLI
+click>=8.1.7
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Legacy Streamlit UI (optional)
 streamlit
-python-dotenv
-langchain-openai
-langchain-ollama
-backports.tarfile
-langchain-anthropic
-langchain_community
-langchain_google_genai
