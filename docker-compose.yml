@@ -1,0 +1,24 @@
+version: "3.8"
+
+# This compose file runs Robin and maps the host so the container can reach
+# a locally running Ollama. On Linux you can alternatively use host
+# networking (see commented section below).
+
+services:
+  robin:
+    image: apurvsg/robin:latest
+    restart: unless-stopped
+    # Using host networking on Linux ensures the container can reach a
+    # locally-running Ollama bound to 127.0.0.1:11434.
+    network_mode: "host"
+    env_file:
+      - .env
+    environment:
+      - OLLAMA_BASE_URL=http://127.0.0.1:11434
+    # Run web UI on an available port and bind to all interfaces so it's reachable
+    # from the host. Change the port if 3000 is already in use on your machine.
+    command: ui --ui-port 3000 --ui-host 0.0.0.0
+
+# Note: `network_mode: host` is Linux-only. If you need bridge networking
+# (e.g., on macOS/Windows), revert to the previous configuration using
+# `extra_hosts` and `host.docker.internal`.
