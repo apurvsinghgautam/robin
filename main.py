@@ -36,7 +36,7 @@ def robin():
     default=DEFAULT_MODEL,
     show_default=True,
     type=str,
-    help="Claude model to use",
+    help="Model to use (Claude models like 'claude-sonnet-4-20250514' or Ollama models like 'llama3.1')",
 )
 def cli(query: str, output: str, interactive: bool, model: str):
     """Run Robin in CLI mode.
@@ -46,6 +46,7 @@ def cli(query: str, output: str, interactive: bool, model: str):
       robin cli -q "ransomware payments"
       robin cli -q "threat actor APT28" -o report
       robin cli -q "credential leaks" --interactive
+      robin cli -q "dark web markets" -m llama3.1  # Use Ollama model
     """
     asyncio.run(_run_cli(query, output, interactive, model))
 

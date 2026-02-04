@@ -8,6 +8,7 @@ import anthropic
 
 from .prompts import ROBIN_SYSTEM_PROMPT
 from .tools import TOOL_DEFINITIONS, execute_tool
+from .ollama_client import OllamaClient, is_ollama_model
 from config import DEFAULT_MODEL, MAX_AGENT_TURNS
 
 
@@ -23,12 +24,13 @@ class InvestigationResult:
 
 class RobinAgent:
     """
-    Autonomous dark web OSINT agent using Anthropic SDK.
+    Autonomous dark web OSINT agent using Anthropic SDK or Ollama.
 
     Provides:
     - Dark web search and scraping via custom tools
     - Streaming responses with callbacks
     - Tool use handling
+    - Support for both Claude (Anthropic) and Ollama models
     """
 
     def __init__(
@@ -45,7 +47,7 @@ class RobinAgent:
             on_text: Callback for streaming text chunks
             on_tool_use: Callback when a tool is invoked
             on_complete: Callback when investigation completes
-            model: Claude model to use (default from config)
+            model: Model to use (Claude or Ollama model name, default from config)
         """
         self.on_text = on_text
         self.on_tool_use = on_tool_use
@@ -54,7 +56,14 @@ class RobinAgent:
         self.session_id: Optional[str] = None
         self._tools_used: list = []
         self._messages: list = []
-        self._client = anthropic.Anthropic()
+        
+        # Initialize appropriate client based on model
+        if is_ollama_model(self.model):
+            self._client = OllamaClient(model=self.model)
+            self._is_ollama = True
+        else:
+            self._client = anthropic.Anthropic()
+            self._is_ollama = False
 
     def _get_tools(self) -> list[dict]:
         """Get tool definitions for Claude API."""
@@ -81,6 +90,20 @@ class RobinAgent:
         Yields:
             Text chunks as they arrive (if streaming)
         """
+        # Route to appropriate implementation based on model type
+        if self._is_ollama:
+            async for chunk in self._investigate_ollama(query_text, stream):
+                yield chunk
+        else:
+            async for chunk in self._investigate_anthropic(query_text, stream):
+                yield chunk
+
+    async def _investigate_anthropic(
+        self,
+        query_text: str,
+        stream: bool = True,
+    ) -> AsyncIterator[str]:
+        """Anthropic-specific investigation implementation."""
         import time
         start_time = time.time()
 
@@ -196,6 +219,74 @@ class RobinAgent:
             else:
                 # No more tool calls, we're done
                 break
+
+        end_time = time.time()
+        duration_ms = int((end_time - start_time) * 1000)
+
+        result = InvestigationResult(
+            text=full_response,
+            session_id=self.session_id,
+            duration_ms=duration_ms,
+            num_turns=num_turns,
+            tools_used=self._tools_used.copy(),
+        )
+
+        if self.on_complete:
+            self.on_complete(result)
+
+        if not stream:
+            yield full_response
+
+    async def _investigate_ollama(
+        self,
+        query_text: str,
+        stream: bool = True,
+    ) -> AsyncIterator[str]:
+        """
+        Ollama-specific investigation implementation.
+        
+        Note: Ollama doesn't have native function calling, so we use a simpler approach
+        where the model generates text responses only. For tool usage, we'd need to
+        implement prompt-based tool calling or use a different approach.
+        """
+        import time
+        start_time = time.time()
+
+        self._tools_used = []
+        full_response = ""
+        num_turns = 0
+
+        # Add user message
+        self._messages.append({
+            "role": "user",
+            "content": query_text
+        })
+
+        # For Ollama, we use a simplified approach without tool calling
+        # The model provides direct analysis based on the query
+        tools = self._get_tools()
+        
+        num_turns = 1  # Single turn for Ollama
+        
+        # Stream response from Ollama
+        async for chunk in self._client._stream_chat(
+            messages=self._messages,
+            system=ROBIN_SYSTEM_PROMPT,
+            tools=tools  # Passed as context, not for calling
+        ):
+            if chunk.get("type") == "content_block_delta":
+                text = chunk["delta"]["text"]
+                full_response += text
+                if self.on_text:
+                    self.on_text(text)
+                if stream:
+                    yield text
+
+        # Add assistant response to history
+        self._messages.append({
+            "role": "assistant",
+            "content": full_response
+        })
 
         end_time = time.time()
         duration_ms = int((end_time - start_time) * 1000)
