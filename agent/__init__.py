@@ -17,6 +17,7 @@ from .subagents import (
     run_subagents_parallel,
     get_available_subagents,
 )
+from .ollama_client import is_ollama_model, get_available_ollama_models
 
 __all__ = [
     # Main agent
@@ -42,4 +43,7 @@ __all__ = [
     "run_subagent",
     "run_subagents_parallel",
     "get_available_subagents",
+    # Ollama support
+    "is_ollama_model",
+    "get_available_ollama_models",
 ]

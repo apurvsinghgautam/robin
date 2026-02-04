@@ -1,4 +1,4 @@
-"""Configuration for Robin - Claude Agent SDK version."""
+"""Configuration for Robin - Claude Agent SDK version with Ollama support."""
 import os
 from dotenv import load_dotenv
 
@@ -6,6 +6,9 @@ load_dotenv()
 
 # Anthropic API key (or rely on Claude Code Max subscription)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
+# Ollama API settings (optional, for local models)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 
 # Tor proxy settings
 TOR_SOCKS_PROXY = os.getenv("TOR_SOCKS_PROXY", "socks5h://127.0.0.1:9050")

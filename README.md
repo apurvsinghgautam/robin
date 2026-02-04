@@ -21,6 +21,7 @@
 - **Next.js Web Interface** - Modern web UI with SSE streaming, graph visualization, and report builder
 - **CLI & Interactive Modes** - Terminal-first design with optional interactive sessions
 - **Session Continuity** - Resume investigations with full context preserved
+- **Multiple LLM Support** - Use Claude (Anthropic) or Ollama for local models
 
 ---
 
@@ -80,9 +81,21 @@ Robin uses a coordinator-subagent pattern powered by Claude Agent SDK:
    ```
    Ensure Tor is running: `systemctl status tor` or check port 9050
 
-2. **Anthropic API Key** - Set in environment or `.env` file
+2. **LLM Provider** (choose one):
+
+   **Option A: Anthropic API Key** (Cloud-based, recommended)
    ```bash
    export ANTHROPIC_API_KEY="your-key-here"
+   ```
+
+   **Option B: Ollama** (Local models, free)
+   ```bash
+   # Install Ollama: https://ollama.ai
+   # Pull a model
+   ollama pull llama3.1
+   
+   # Ollama runs on http://127.0.0.1:11434 by default
+   export OLLAMA_BASE_URL="http://127.0.0.1:11434"
    ```
 
 ### Install from Source
@@ -121,6 +134,7 @@ Open `http://localhost:3000` for the web interface.
 
 ### CLI Mode
 
+**With Claude (Anthropic):**
 ```bash
 # Basic investigation
 python main.py cli -q "ransomware payments 2024"
@@ -131,8 +145,23 @@ python main.py cli -q "APT28 infrastructure" --interactive
 # Custom output file
 python main.py cli -q "credential dumps" -o my_report.md
 
-# Custom model
+# Custom Claude model
 python main.py cli -q "zero day exploits" -m claude-opus-4-5-20250514
+```
+
+**With Ollama (Local models):**
+```bash
+# Make sure Ollama is running
+ollama pull llama3.1  # First time only
+
+# Run investigation with Ollama
+python main.py cli -q "ransomware payments 2024" -m llama3.1
+
+# Interactive mode with Ollama
+python main.py cli -q "threat actor APT28" -m mistral --interactive
+
+# Use any Ollama model
+python main.py cli -q "credential dumps" -m deepseek-r1 -o report.md
 ```
 
 ### CLI Options
@@ -147,13 +176,16 @@ CLI Options:
   -q, --query TEXT     Investigation query (required)
   -o, --output TEXT    Output filename for report
   -i, --interactive    Enable follow-up questions
-  -m, --model TEXT     Claude model to use (default: claude-sonnet-4-5-20250514)
+  -m, --model TEXT     Model to use: Claude (claude-*) or Ollama (default: claude-sonnet-4-20250514)
   -h, --help           Show help message
 
 Examples:
+  # Claude (Anthropic)
   python main.py cli -q "ransomware payments"
   python main.py cli -q "threat actor APT28" --interactive
-  python main.py cli -q "dark web marketplaces" -o report.md
+  
+  # Ollama (local)
+  python main.py cli -q "dark web marketplaces" -m llama3.1 -o report.md
 ```
 
 ### Python API
@@ -162,28 +194,42 @@ Examples:
 import asyncio
 from agent import RobinAgent, run_investigation
 
-# Simple one-shot investigation
+# Simple one-shot investigation with Claude
 async def main():
     result = await run_investigation("ransomware payments 2024")
     print(result.text)
 
-asyncio.run(main())
+# With Ollama
+async def main_ollama():
+    agent = RobinAgent(model="llama3.1")
+    result_text = ""
+    async for chunk in agent.investigate("ransomware payments 2024"):
+        result_text += chunk
+    print(result_text)
 
-# Or with callbacks and session management
-agent = RobinAgent(
-    on_text=lambda t: print(t, end=""),
-    on_tool_use=lambda name, args: print(f"\n[Tool: {name}]"),
-)
-
+# Interactive session with streaming
 async def interactive():
-    async for chunk in agent.investigate("APT28"):
-        pass  # Streaming handled by callback
-
-    # Follow-up in same session
-    async for chunk in agent.follow_up("What malware do they use?"):
+    def on_text(text):
+        print(text, end="", flush=True)
+    
+    def on_tool_use(name, input_data):
+        print(f"\n[Using tool: {name}]")
+    
+    # Works with both Claude and Ollama
+    agent = RobinAgent(
+        on_text=on_text,
+        on_tool_use=on_tool_use,
+        model="llama3.1"  # or "claude-sonnet-4-20250514"
+    )
+    
+    async for chunk in agent.investigate("threat actor APT28"):
+        pass  # on_text handles output
+    
+    # Follow-up questions
+    async for chunk in agent.follow_up("What TTPs do they use?"):
         pass
 
-asyncio.run(interactive())
+asyncio.run(main())
 ```
 
 ---
@@ -194,8 +240,10 @@ Environment variables (or `.env` file):
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic API key | Required |
+| `ANTHROPIC_API_KEY` | Anthropic API key (for Claude models) | Required for Claude |
+| `OLLAMA_BASE_URL` | Ollama server URL (for local models) | `http://127.0.0.1:11434` |
 | `TOR_SOCKS_PROXY` | Tor SOCKS5 proxy URL | `socks5h://127.0.0.1:9050` |
+| `ROBIN_MODEL` | Default model to use | `claude-sonnet-4-20250514` |
 | `ROBIN_MODEL` | Claude model to use | `claude-sonnet-4-5-20250514` |
 | `MAX_AGENT_TURNS` | Max agent reasoning turns | `20` |
 | `MAX_SEARCH_WORKERS` | Concurrent search threads | `5` |
