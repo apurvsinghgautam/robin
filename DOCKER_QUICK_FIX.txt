@@ -1,0 +1,49 @@
+═══════════════════════════════════════════════════════════════════
+  🔧 NOT SEEING YOUR CODE CHANGES IN DOCKER? HERE'S THE FIX!
+═══════════════════════════════════════════════════════════════════
+
+QUICK FIX:
+----------
+Run this command to rebuild and see your changes:
+
+    ./robin.sh rebuild
+
+Or manually:
+
+    docker-compose down
+    docker-compose build --no-cache
+    docker-compose up -d
+
+WHY THIS IS NEEDED:
+-------------------
+Robin uses multi-stage Docker builds. Your code is compiled into the 
+Docker image at BUILD TIME, not at runtime. Changes to source files
+require rebuilding the image.
+
+Think of it like this:
+  • docker-compose up      = Start pre-built app (fast, won't show changes)
+  • ./robin.sh rebuild     = Rebuild app with changes (slower, but necessary)
+
+WHEN TO REBUILD:
+----------------
+✅ After changing frontend code (React/Next.js files)
+✅ After changing backend code (Python files)  
+✅ After updating dependencies
+✅ After pulling new code from git
+
+❌ NOT needed for .env changes (just: docker-compose restart)
+❌ NOT needed for docker-compose.yml changes (just restart)
+
+COMMON COMMANDS:
+----------------
+./robin.sh up           # Start services (first time)
+./robin.sh restart      # Restart without rebuilding
+./robin.sh rebuild      # Clean rebuild (use after code changes)
+./robin.sh logs         # View all logs
+./robin.sh status       # Check service status
+
+MORE DETAILS:
+-------------
+See DOCKER_TROUBLESHOOTING.md for complete guide
+
+═══════════════════════════════════════════════════════════════════
