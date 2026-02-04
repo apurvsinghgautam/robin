@@ -128,6 +128,30 @@ cd frontend && npm run dev
 
 Open `http://localhost:3000` for the web interface.
 
+### Docker Deployment (Recommended for Production)
+
+```bash
+# Using the convenience script
+./robin.sh setup-auth  # Configure API keys
+./robin.sh up          # Start all services
+
+# Or with docker-compose directly
+docker-compose up -d
+```
+
+**Services:**
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
+- API Docs: `http://localhost:8000/docs`
+
+**Important:** After making code changes, rebuild the Docker images:
+```bash
+./robin.sh rebuild
+# Or: docker-compose build --no-cache && docker-compose up -d
+```
+
+See [DOCKER_TROUBLESHOOTING.md](DOCKER_TROUBLESHOOTING.md) for details on why rebuilds are needed.
+
 ---
 
 ## Usage

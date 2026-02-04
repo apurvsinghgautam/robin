@@ -40,6 +40,7 @@ print_usage() {
     echo "  up          Start all services"
     echo "  down        Stop all services"
     echo "  build       Build and start services"
+    echo "  rebuild     Force rebuild (no cache) and start"
     echo "  restart     Restart all services"
     echo "  logs        Tail logs from all services"
     echo "  logs:api    Tail backend API logs"
@@ -103,6 +104,20 @@ cmd_build() {
     $COMPOSE up --build -d
     echo ""
     echo -e "${GREEN}Services started!${NC}"
+    echo "  Frontend: http://localhost:3000"
+    echo "  Backend:  http://localhost:8000"
+    echo "  API Docs: http://localhost:8000/docs"
+}
+
+cmd_rebuild() {
+    check_auth
+    echo -e "${GREEN}Forcing rebuild of Docker images (no cache)...${NC}"
+    echo -e "${YELLOW}This may take several minutes...${NC}"
+    $COMPOSE down
+    $COMPOSE build --no-cache
+    $COMPOSE up -d
+    echo ""
+    echo -e "${GREEN}Services rebuilt and started!${NC}"
     echo "  Frontend: http://localhost:3000"
     echo "  Backend:  http://localhost:8000"
     echo "  API Docs: http://localhost:8000/docs"
@@ -248,6 +263,9 @@ case "${1:-}" in
         ;;
     build)
         cmd_build
+        ;;
+    rebuild)
+        cmd_rebuild
         ;;
     restart)
         cmd_restart
