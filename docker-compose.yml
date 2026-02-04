@@ -46,6 +46,8 @@ services:
       - API_PREFIX=/api/v1
       # Tor proxy inside container network
       - TOR_SOCKS_PROXY=socks5h://tor:9050
+      # Ollama base URL (use host gateway to reach host's Ollama daemon)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     depends_on:
@@ -53,6 +55,8 @@ services:
         condition: service_healthy
       tor:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./agent:/app/agent:ro
       - ./core:/app/core:ro
