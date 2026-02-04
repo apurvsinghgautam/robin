@@ -257,3 +257,25 @@ export async function exportReport(
 
   return response.blob();
 }
+
+// ============================================
+// Settings/Models API
+// ============================================
+
+export interface ModelProvider {
+  available: boolean;
+  models: string[];
+  configured: boolean;
+  base_url?: string;
+}
+
+export interface ModelsInfo {
+  current_model: string;
+  current_model_type: 'claude' | 'ollama';
+  claude: ModelProvider;
+  ollama: ModelProvider;
+}
+
+export async function getModelsInfo(): Promise<ModelsInfo> {
+  return fetchAPI<ModelsInfo>('/settings/models');
+}
