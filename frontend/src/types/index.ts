@@ -31,6 +31,8 @@ export interface InvestigationDetail {
   full_response: string | null;
   tools_used: ToolExecution[];
   subagent_results: SubAgentResult[];
+  // Full chat history messages
+  messages: Message[];
   model: string;
   num_turns: number | null;
   duration_ms: number | null;

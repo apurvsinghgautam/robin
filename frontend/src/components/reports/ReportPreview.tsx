@@ -24,6 +24,29 @@ const MOCK_IOCS: IOCEntry[] = [
 export default function ReportPreview({ report }: ReportPreviewProps) {
   const sortedSections = [...report.sections].sort((a, b) => a.order - b.order);
 
+  const normalizePlaceholders = (text?: string) => {
+    if (!text) return text || '';
+
+    // Replace various legacy placeholder formats with visible inline code
+    // and fenced code block fallbacks so ReactMarkdown renders them.
+    let out = text;
+
+    // Inline code placeholders like @@INLINE_CODE_0@@, @@INLINECODE0@@, __INLINE_CODE_0__
+    out = out.replace(/(?:@@|__)\s*INLINE[_ ]?CODE[_ ]?(\d+)(?:@@|__)/gi, (_m, idx) => {
+      return `\`${'INLINECODE' + idx}\``;
+    });
+
+    // Plain variant: @@INLINECODE0@@
+    out = out.replace(/@@\s*INLINECODE(\d+)@@/gi, (_m, idx) => `\`${'INLINECODE' + idx}\``);
+
+    // Code block placeholders like @@CODE_BLOCK_0@@ -> render as fenced placeholder block
+    out = out.replace(/(?:@@|__)\s*CODE[_ ]?BLOCK[_ ]?(\d+)(?:@@|__)/gi, (_m, idx) => {
+      return `\n\n\`\`\`\nCODE_BLOCK_${idx}\n\`\`\`\n\n`;
+    });
+
+    return out;
+  };
+
   return (
     <div className="prose prose-invert prose-slate max-w-none">
       {/* Report Header */}
@@ -154,7 +177,7 @@ export default function ReportPreview({ report }: ReportPreviewProps) {
                     ),
                   }}
                 >
-                  {section.content}
+                  {normalizePlaceholders(section.content)}
                 </ReactMarkdown>
               ) : (
                 <p className="text-slate-500 italic">No content</p>

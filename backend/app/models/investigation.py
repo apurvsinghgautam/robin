@@ -97,6 +97,8 @@ class InvestigationDetail(BaseModel):
     full_response: Optional[str] = None
     tools_used: list[ToolExecution] = []
     subagent_results: list[SubAgentResultModel] = []
+    # Include message rows for full chat history
+    messages: list["MessageModel"] = []
     model: str
     num_turns: Optional[int] = None
     duration_ms: Optional[int] = None
@@ -114,6 +116,9 @@ class MessageModel(BaseModel):
     content: str
     tool_calls: Optional[list[dict]] = None
     created_at: datetime
+    
+    class Config:
+        from_attributes = True
 
 
 # SSE Event Models

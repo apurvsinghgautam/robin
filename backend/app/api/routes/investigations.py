@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...db.database import get_db
@@ -30,6 +31,7 @@ from ...services.agent_service import (
 from ...services.graph_service import GraphService
 from ...sse.stream import SSEStreamManager
 from ...config import get_settings
+from ...services.report_service import ReportService
 
 router = APIRouter(prefix="/investigations", tags=["investigations"])
 settings = get_settings()
@@ -305,7 +307,7 @@ async def get_investigation(
     db: AsyncSession = Depends(get_db),
 ):
     """Get full investigation details."""
-    stmt = select(Investigation).where(Investigation.id == investigation_id)
+    stmt = select(Investigation).where(Investigation.id == investigation_id).options(selectinload(Investigation.messages))
     result = await db.execute(stmt)
     investigation = result.scalar_one_or_none()
 

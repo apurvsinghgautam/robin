@@ -24,14 +24,28 @@ export default function InvestigationDetailPage() {
     searchProgress,
     connectToStream,
     disconnect,
+    loadInvestigation,
   } = useInvestigationStore();
 
   useEffect(() => {
-    if (investigationId) {
-      connectToStream(investigationId);
-    }
+    if (!investigationId) return;
+
+    let mounted = true;
+
+    (async () => {
+      try {
+        await loadInvestigation(investigationId);
+      } catch (err) {
+        // ignore - load may fail if investigation not found
+      }
+
+      if (mounted) {
+        connectToStream(investigationId);
+      }
+    })();
 
     return () => {
+      mounted = false;
       disconnect();
     };
   }, [investigationId, connectToStream, disconnect]);

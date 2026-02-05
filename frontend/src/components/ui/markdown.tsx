@@ -26,7 +26,7 @@ export function Markdown({ content, className = "" }: MarkdownProps) {
     // Code blocks (``` ... ```) - must be processed first to protect content
     const codeBlocks: string[] = [];
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-      const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
+      const placeholder = `<pre class="md-code-block"><code class="md-code">${code.trim()}</code></pre>`;
       codeBlocks.push(`<pre class="md-code-block"><code class="md-code">${code.trim()}</code></pre>`);
       return placeholder;
     });
@@ -34,7 +34,7 @@ export function Markdown({ content, className = "" }: MarkdownProps) {
     // Inline code (`...`) - protect from other processing
     const inlineCodes: string[] = [];
     html = html.replace(/`([^`]+)`/g, (_, code) => {
-      const placeholder = `__INLINE_CODE_${inlineCodes.length}__`;
+      const placeholder = `<code class="md-inline-code">${code}</code>`;
       inlineCodes.push(`<code class="md-inline-code">${code}</code>`);
       return placeholder;
     });
@@ -138,14 +138,16 @@ export function Markdown({ content, className = "" }: MarkdownProps) {
     // Clean up newlines between block elements
     html = html.replace(/>\s*\n\s*</g, '><');
 
-    // Restore code blocks
-    codeBlocks.forEach((code, i) => {
-      html = html.replace(`__CODE_BLOCK_${i}__`, code);
+    // Restore code blocks (support legacy/variant placeholders)
+    html = html.replace(/(?:@@|__)\s*CODE[_ ]?BLOCK[_ ]?(\d+)(?:@@|__)/g, (_, idx) => {
+      const i = Number(idx);
+      return codeBlocks[i] || _;
     });
 
-    // Restore inline code
-    inlineCodes.forEach((code, i) => {
-      html = html.replace(`__INLINE_CODE_${i}__`, code);
+    // Restore inline code (support legacy/variant placeholders)
+    html = html.replace(/(?:@@|__)\s*INLINE[_ ]?CODE[_ ]?(\d+)(?:@@|__)/g, (_, idx) => {
+      const i = Number(idx);
+      return inlineCodes[i] || _;
     });
 
     return html;

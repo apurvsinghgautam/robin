@@ -34,12 +34,13 @@ interface InvestigationState {
 }
 
 interface InvestigationActions {
-  // Investigation actions
+  connectToStream: (investigationId: string) => void;
+  disconnect: () => void;
+
+  // Investigation lifecycle
   startInvestigation: (query: string) => Promise<string>;
   sendFollowUp: (query: string) => Promise<string>;
   loadInvestigation: (id: string) => Promise<void>;
-  connectToStream: (investigationId: string) => void;
-  disconnect: () => void;
 
   // Streaming actions (called by SSE hook)
   appendText: (text: string) => void;
@@ -128,7 +129,7 @@ export const useInvestigationStore = create<InvestigationStore>()(
 
         // Send a follow-up query
         sendFollowUp: async (query: string): Promise<string> => {
-          const { currentId, messages, eventSource } = get();
+          const { currentId, eventSource } = get();
 
           if (!currentId) {
             throw new Error('No active investigation');
@@ -138,6 +139,10 @@ export const useInvestigationStore = create<InvestigationStore>()(
           if (eventSource) {
             eventSource.close();
           }
+
+          // Re-read messages after closing stream to avoid a race where the
+          // assistant message was just appended by the complete handler.
+          const messages = get().messages;
 
           // Add user message
           const userMessage: Message = {
@@ -177,29 +182,42 @@ export const useInvestigationStore = create<InvestigationStore>()(
           try {
             const details = await investigationAPI.get(id);
 
-            // Construct messages from API response
+            // Prefer explicit message rows returned by the API (preserves full history)
             const messages: Message[] = [];
 
-            // Add user message from initial query
-            if (details.initial_query) {
-              messages.push({
-                id: `user-${details.created_at}`,
-                role: 'user',
-                content: details.initial_query,
-                created_at: details.created_at,
-              });
-            }
+            if (details.messages && Array.isArray(details.messages) && details.messages.length > 0) {
+              for (const m of details.messages) {
+                messages.push({
+                  id: String(m.id),
+                  role: m.role as 'user' | 'assistant',
+                  content: m.content,
+                  created_at: m.created_at,
+                  // backend may use `tool_calls` or `tool_executions` depending on version
+                  tool_executions: (m as any).tool_executions || (m as any).tool_calls || [],
+                  subagent_results: (m as any).subagent_results || [],
+                });
+              }
+            } else {
+              // Fallback for older API responses that only include initial_query/full_response
+              if (details.initial_query) {
+                messages.push({
+                  id: `user-${details.created_at}`,
+                  role: 'user',
+                  content: details.initial_query,
+                  created_at: details.created_at,
+                });
+              }
 
-            // Add assistant message from full response
-            if (details.full_response) {
-              messages.push({
-                id: `assistant-${details.completed_at || details.created_at}`,
-                role: 'assistant',
-                content: details.full_response,
-                created_at: details.completed_at || details.created_at,
-                tool_executions: details.tools_used || [],
-                subagent_results: details.subagent_results || [],
-              });
+              if (details.full_response) {
+                messages.push({
+                  id: `assistant-${details.completed_at || details.created_at}`,
+                  role: 'assistant',
+                  content: details.full_response,
+                  created_at: details.completed_at || details.created_at,
+                  tool_executions: details.tools_used || [],
+                  subagent_results: details.subagent_results || [],
+                });
+              }
             }
 
             set({
@@ -474,7 +492,6 @@ export const useInvestigationStore = create<InvestigationStore>()(
         name: 'robin-investigation-store',
         partialize: (state) => ({
           currentId: state.currentId,
-          messages: state.messages,
         }),
       }
     ),

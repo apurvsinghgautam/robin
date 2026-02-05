@@ -65,11 +65,14 @@ class ReportService:
                 })
 
         # Full Response section
+        # Normalize response to avoid raw placeholder tokens in reports
+        normalized_response = self._normalize_placeholders(response)
+
         sections.append({
             "id": "response",
             "type": "text",
             "title": "Full Investigation Response",
-            "content": response,
+            "content": normalized_response,
         })
 
         return {
@@ -134,7 +137,10 @@ class ReportService:
         for section in report.get("sections", []):
             lines.append(f"## {section['title']}")
             lines.append("")
-            lines.append(section["content"])
+            # Normalize legacy placeholder tokens if present
+            content = section.get("content", "") or ""
+            content = self._normalize_placeholders(content)
+            lines.append(content)
             lines.append("")
             lines.append("---")
             lines.append("")
@@ -181,7 +187,9 @@ class ReportService:
         for section in report.get("sections", []):
             html_parts.append(f"<h2>{section['title']}</h2>")
             # Simple markdown to HTML conversion
-            content = section["content"]
+            content = section.get("content", "") or ""
+            # Normalize placeholders so exported HTML doesn't show raw markers
+            content = self._normalize_placeholders(content)
             content = content.replace("\n\n", "</p><p>")
             content = f"<p>{content}</p>"
             html_parts.append(content)
@@ -190,6 +198,48 @@ class ReportService:
         html_parts.append("</body></html>")
 
         return "\n".join(html_parts)
+
+    def _normalize_placeholders(self, text: str) -> str:
+        """Replace legacy inline/code-block placeholder tokens with visible markdown equivalents.
+
+        This attempts to make placeholders render as inline code or fenced blocks when the
+        original extraction step left tokens like @@INLINE_CODE_0@@ or @@INLINECODE0@@.
+        """
+        if not text:
+            return text
+
+        out = text
+
+        # Inline placeholder variants -> render as inline code with a readable label
+        out = re_placeholder_inline(out)
+
+        # Code block placeholder variants -> render as fenced code blocks with label
+        out = re_placeholder_codeblock(out)
+
+        return out
+
+
+def re_placeholder_inline(s: str) -> str:
+    import re
+
+    # Match @@INLINE_CODE_0@@, @@INLINECODE0@@, __INLINE_CODE_0__, etc.
+    s = re.sub(r"(?:@@|__)\s*INLINE[_ ]?CODE[_ ]?(\d+)(?:@@|__)", lambda m: f"`INLINE_CODE_{m.group(1)}`", s, flags=re.IGNORECASE)
+    s = re.sub(r"@@\s*INLINECODE(\d+)@@", lambda m: f"`INLINE_CODE_{m.group(1)}`", s, flags=re.IGNORECASE)
+    # Also handle variants with a trailing # e.g. INLINECODE0#
+    s = re.sub(r"INLINECODE(\d+)#", lambda m: f"`INLINE_CODE_{m.group(1)}`", s)
+    return s
+
+
+def re_placeholder_codeblock(s: str) -> str:
+    import re
+
+    # Match @@CODE_BLOCK_0@@ and variants -> replace with fenced code block label
+    def cb(m):
+        idx = m.group(1)
+        return f"\n\n```\nCODE_BLOCK_{idx}\n```\n\n"
+
+    s = re.sub(r"(?:@@|__)\s*CODE[_ ]?BLOCK[_ ]?(\d+)(?:@@|__)", cb, s, flags=re.IGNORECASE)
+    return s
 
     def export_json(self, report: dict) -> dict:
         """Export report as JSON (passthrough with cleanup)."""
