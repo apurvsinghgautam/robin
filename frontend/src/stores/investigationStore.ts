@@ -180,6 +180,12 @@ export const useInvestigationStore = create<InvestigationStore>()(
         // Load an existing investigation
         loadInvestigation: async (id: string): Promise<void> => {
           try {
+            // Close any existing EventSource to avoid cross-talk between investigations
+            const { eventSource } = get();
+            if (eventSource) {
+              try { eventSource.close(); } catch (e) { /* ignore */ }
+            }
+
             const details = await investigationAPI.get(id);
 
             // Prefer explicit message rows returned by the API (preserves full history)

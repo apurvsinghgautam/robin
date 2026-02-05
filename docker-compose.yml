@@ -1,12 +1,12 @@
 services:
   # Tor Proxy - internal only, accessed by backend via Docker network
   tor:
-    image: dperson/torproxy:latest
+    image: peterdavehello/tor-socks-proxy:latest
     container_name: robin-tor
     restart: unless-stopped
     # No ports exposed - only accessible within Docker network
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf --socks5 localhost:9050 http://check.torproject.org/ > /dev/null || netstat -tln | grep -q ':9050 '"]
+      test: ["CMD-SHELL", "curl -sf --socks5-hostname localhost:9150 http://check.torproject.org/ > /dev/null"]
       interval: 30s
       timeout: 15s
       retries: 5
@@ -44,8 +44,8 @@ services:
       - DEFAULT_MODEL=${DEFAULT_MODEL:-claude-sonnet-4-20250514}
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost","http://127.0.0.1"]}
       - API_PREFIX=/api/v1
-      # Tor proxy inside container network
-      - TOR_SOCKS_PROXY=socks5h://tor:9050
+      # Tor proxy inside container network (tor image exposes SocksPort 9150)
+      - TOR_SOCKS_PROXY=socks5h://tor:9150
       # Ollama base URL (use host gateway to reach host's Ollama daemon)
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     ports:

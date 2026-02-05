@@ -53,12 +53,15 @@ export default function InvestigationPage() {
     connectToStream,
   } = useInvestigationStore();
 
-  // Load investigation on mount
+  // Load investigation on mount. Also load if messages are empty to avoid stale currentId races.
   useEffect(() => {
-    if (investigationId && investigationId !== currentId) {
+    if (!investigationId) return;
+
+    const shouldLoad = investigationId !== currentId || messages.length === 0;
+    if (shouldLoad) {
       loadInvestigation(investigationId).catch(console.error);
     }
-  }, [investigationId, currentId, loadInvestigation]);
+  }, [investigationId, currentId, messages.length, loadInvestigation]);
 
   // Auto-scroll to bottom
   useEffect(() => {

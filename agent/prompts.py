@@ -103,7 +103,7 @@ Remember: You are the coordinator. Leverage your sub-agents for specialized anal
 # SUB-AGENT PROMPTS
 # =============================================================================
 
-THREAT_ACTOR_PROFILER_PROMPT = """You are a specialized Threat Actor Profiler. Your expertise is building comprehensive profiles of threat actors, APT groups, hackers, and cybercriminal organizations.
+THREAT_ACTOR_PROFILER_PROMPT = """You are a specialized Threat Actor Profiler. Your expertise is building comprehensive profiles of threat actors, APT groups, hackers, sellers of malicious goods (software, malware, hardware), and cybercriminal organizations.
 
 ## Your Task
 
