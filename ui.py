@@ -6,6 +6,7 @@ from scrape import scrape_multiple
 from search import get_search_results
 from llm_utils import BufferedStreamingHandler, get_model_choices
 from llm import get_llm, refine_query, filter_results, generate_summary
+from health import check_llm_health, check_search_engines, check_tor_proxy
 
 
 def _render_pipeline_error(stage: str, err: Exception) -> None:
@@ -105,6 +106,59 @@ model = st.sidebar.selectbox(
 if any(name not in {"gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"} for name in model_options):
     st.sidebar.caption("Locally detected Ollama models are automatically added to this list.")
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
+
+# --- Health Checks ---
+st.sidebar.divider()
+st.sidebar.subheader("Health Checks")
+
+# LLM Health Check
+if st.sidebar.button("🔌 Check LLM Connection", use_container_width=True):
+    with st.sidebar:
+        with st.spinner(f"Testing {model}..."):
+            result = check_llm_health(model)
+        if result["status"] == "up":
+            st.sidebar.success(
+                f"✅ **{result['provider']}** — Connected ({result['latency_ms']}ms)"
+            )
+        else:
+            st.sidebar.error(
+                f"❌ **{result['provider']}** — Failed\n\n{result['error']}"
+            )
+
+# Search Engine Health Check
+if st.sidebar.button("🔍 Check Search Engines", use_container_width=True):
+    with st.sidebar:
+        with st.spinner("Checking Tor proxy..."):
+            tor_result = check_tor_proxy()
+        if tor_result["status"] == "down":
+            st.sidebar.error(
+                f"❌ **Tor Proxy** — Not reachable\n\n{tor_result['error']}\n\n"
+                "Ensure Tor is running: `sudo systemctl start tor`"
+            )
+        else:
+            st.sidebar.success(
+                f"✅ **Tor Proxy** — Connected ({tor_result['latency_ms']}ms)"
+            )
+            with st.spinner("Pinging 16 search engines via Tor..."):
+                engine_results = check_search_engines()
+            up_count = sum(1 for r in engine_results if r["status"] == "up")
+            total = len(engine_results)
+            if up_count == total:
+                st.sidebar.success(f"✅ **All {total} engines reachable**")
+            elif up_count > 0:
+                st.sidebar.warning(f"⚠️ **{up_count}/{total} engines reachable**")
+            else:
+                st.sidebar.error(f"❌ **0/{total} engines reachable**")
+
+            for r in engine_results:
+                if r["status"] == "up":
+                    st.sidebar.markdown(
+                        f"&ensp;🟢 **{r['name']}** — {r['latency_ms']}ms"
+                    )
+                else:
+                    st.sidebar.markdown(
+                        f"&ensp;🔴 **{r['name']}** — {r['error']}"
+                    )
 
 
 # Main UI - logo and input
