@@ -1,5 +1,4 @@
 bs4
-yaspin
 pysocks
 requests
 streamlit

@@ -1,13 +1,12 @@
 <div align="center">
    <img src=".github/assets/logo.png" alt="Logo" width="300">
-   <br><a href="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml"><img alt="Build" src="https://github.com/apurvsinghgautam/robin/actions/workflows/binary.yml/badge.svg"></a> <a href="https://github.com/apurvsinghgautam/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a> <a href="https://hub.docker.com/r/apurvsg/robin"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/apurvsg/robin"></a>
+   <br><a href="https://github.com/apurvsinghgautam/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a> <a href="https://hub.docker.com/r/apurvsg/robin"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/apurvsg/robin"></a>
    <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
    <p>Robin is an AI-powered tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries, filter search results from dark web search engines, and provide an investigation summary.</p>
    <a href="#installation">Installation</a> &bull; <a href="#usage">Usage</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
 </div>
 
-![Demo](.github/assets/screen.png)
 ![Demo](.github/assets/screen-ui.png)
 ![Workflow](.github/assets/robin-workflow.png)
 
@@ -17,8 +16,8 @@
 
 - ⚙️ **Modular Architecture** – Clean separation between search, scrape, and LLM workflows.
 - 🤖 **Multi-Model Support** – Easily switch between OpenAI, Claude, Gemini or local models like Ollama.
-- 💻 **CLI-First Design** – Built for terminal warriors and automation ninjas.
-- 🐳 **Docker-Ready** – Optional Docker deployment for clean, isolated usage.
+- 🌐 **Web UI** – Streamlit-based interface for interactive investigations.
+- 🐳 **Docker-Ready** – Recommended Docker deployment for clean, isolated usage.
 - 📝 **Custom Reporting** – Save investigation output to file for reporting or further analysis.
 - 🧩 **Extensible** – Easy to plug in new search engines, models, or output formats.
 
@@ -40,7 +39,7 @@
 >
 > For Ollama, provide `http://host.docker.internal:11434` as `OLLAMA_BASE_URL` in your env if running using docker method or `http://127.0.0.1:11434` for other methods. You might need to serve Ollama on 0.0.0.0 depending on your OS. You can do by running `OLLAMA_HOST=0.0.0.0 ollama serve &` in your terminal.
 
-### Docker (Web UI Mode) [Recommended]
+### Docker [Recommended]
 
 - Pull the latest Robin docker image
 ```bash
@@ -53,56 +52,21 @@ docker run --rm \
    -v "$(pwd)/.env:/app/.env" \
    --add-host=host.docker.internal:host-gateway \
    -p 8501:8501 \
-   apurvsg/robin:latest ui --ui-port 8501 --ui-host 0.0.0.0
+   apurvsg/robin:latest
 ```
 
-### Release Binary (CLI Mode)
-
-- Download the appropriate binary for your system from the [latest release](https://github.com/apurvsinghgautam/robin/releases/latest)
-- Unzip the file, make it executable 
-```bash
-chmod +x robin
-```
-
-- Run the binary as:
-```bash
-robin cli --model gpt-4.1 --query "ransomware payments"
-```
+- Open your browser and navigate to `http://localhost:8501`
 
 ### Using Python (Development Version)
 
-- With `Python 3.10+` installed, run the following:
+- With `Python 3.10+` and Tor installed, run the following:
 
 ```bash
 pip install -r requirements.txt
-python main.py cli -m gpt-4.1 -q "ransomware payments" -t 12
+streamlit run ui.py
 ```
 
----
-
-## Usage (CLI/Development Mode)
-
-```bash
-Robin: AI-Powered Dark Web OSINT Tool
-
-options:
-  -h, --help            show this help message and exit
-  --model {gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}, -m {gpt4o,gpt-4.1,claude-3-5-sonnet-latest,llama3.1,gemini-2.5-flash}
-                        Select LLM model (e.g., gpt4.1, claude sonnet 3.5, ollama models, gemini 2.5 flash)
-  --query QUERY, -q QUERY
-                        Dark web search query
-  --threads THREADS, -t THREADS
-                        Number of threads to use for scraping (Default: 5)
-  --output OUTPUT, -o OUTPUT
-                        Filename to save the final intelligence summary. If not provided, a filename based on the
-                        current date and time is used.
-
-Example commands:
- - robin -m gpt4.1 -q "ransomware payments" -t 12
- - robin --model gpt4.1 --query "sensitive credentials exposure" --threads 8 --output filename
- - robin -m llama3.1 -q "zero days"
- - robin -m gemini-2.5-flash -q "zero days"
-```
+- Open your browser and navigate to `http://localhost:8501`
 
 ---
 
