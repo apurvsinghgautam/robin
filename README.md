@@ -8,6 +8,9 @@
 </div>
 
 ![Demo](.github/assets/screen-ui.png)
+
+
+## Architecture
 ![Workflow](.github/assets/robin-workflow.png)
 
 ---
@@ -94,6 +97,7 @@ Open an Issue for any of these situations:
 - Tools inspiration from my [OSINT Tools for the Dark Web](https://github.com/apurvsinghgautam/dark-web-osint-tools) repository.
 - LLM Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
 - Logo Design by my friend [Tanishq Rupaal](https://github.com/Tanq16/)
+
 
 
 
