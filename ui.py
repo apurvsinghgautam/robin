@@ -5,7 +5,16 @@ from datetime import datetime
 from scrape import scrape_multiple
 from search import get_search_results
 from llm_utils import BufferedStreamingHandler, get_model_choices
-from llm import get_llm, refine_query, filter_results, generate_summary
+from llm import get_llm, refine_query, filter_results, generate_summary, PRESET_PROMPTS
+from config import (
+    OPENAI_API_KEY,
+    ANTHROPIC_API_KEY,
+    GOOGLE_API_KEY,
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
+    OLLAMA_BASE_URL,
+    LLAMA_CPP_BASE_URL,
+)
 from health import check_llm_health, check_search_engines, check_tor_proxy
 
 
@@ -88,6 +97,9 @@ st.sidebar.markdown(
     """Made by [Apurv Singh Gautam](https://www.linkedin.com/in/apurvsinghgautam/)"""
 )
 st.sidebar.subheader("Settings")
+def _env_is_set(value) -> bool:
+    return bool(value and str(value).strip() and "your_" not in str(value))
+
 model_options = get_model_choices()
 default_model_index = (
     next(
@@ -97,6 +109,15 @@ default_model_index = (
     if model_options
     else 0
 )
+
+if not model_options:
+    st.sidebar.error(
+        "⛔ **No LLM models available.**\n\n"
+        "No API keys or local providers are configured. "
+        "Set at least one in your `.env` file and restart Robin.\n\n"
+        "See **Provider Configuration** below for details."
+    )
+
 model = st.sidebar.selectbox(
     "Select LLM Model",
     model_options,
@@ -106,6 +127,57 @@ model = st.sidebar.selectbox(
 if any(name not in {"gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"} for name in model_options):
     st.sidebar.caption("Locally detected Ollama models are automatically added to this list.")
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
+
+st.sidebar.divider()
+st.sidebar.subheader("Provider Configuration")
+_providers = [
+    ("OpenAI",      OPENAI_API_KEY,     True),
+    ("Anthropic",   ANTHROPIC_API_KEY,  True),
+    ("Google",      GOOGLE_API_KEY,     True),
+    ("OpenRouter",  OPENROUTER_API_KEY, True),
+    ("Ollama",      OLLAMA_BASE_URL,    False),
+    ("llama.cpp",   LLAMA_CPP_BASE_URL, False),
+]
+for name, value, is_cloud in _providers:
+    if _env_is_set(value):
+        st.sidebar.markdown(f"&ensp;✅ **{name}** — configured")
+    elif is_cloud:
+        st.sidebar.markdown(f"&ensp;⚠️ **{name}** — API key not set")
+    else:
+        st.sidebar.markdown(f"&ensp;🔵 **{name}** — not configured *(optional)*")
+
+with st.sidebar.expander("⚙️ Prompt Settings"):
+    preset_options = {
+        "🔍 Dark Web Threat Intel": "threat_intel",
+        "🦠 Ransomware / Malware Focus": "ransomware_malware",
+        "👤 Personal / Identity Investigation": "personal_identity",
+        "🏢 Corporate Espionage / Data Leaks": "corporate_espionage",
+    }
+    preset_placeholders = {
+        "threat_intel": "e.g. Pay extra attention to cryptocurrency wallet addresses and exchange names.",
+        "ransomware_malware": "e.g. Highlight any references to double-extortion tactics or known ransomware-as-a-service affiliates.",
+        "personal_identity": "e.g. Flag any passport or government ID numbers and note which country they appear to be from.",
+        "corporate_espionage": "e.g. Prioritize any mentions of source code repositories, API keys, or internal Slack/email dumps.",
+    }
+    selected_preset_label = st.selectbox(
+        "Research Domain",
+        list(preset_options.keys()),
+        key="preset_select",
+    )
+    selected_preset = preset_options[selected_preset_label]
+    st.text_area(
+        "System Prompt",
+        value=PRESET_PROMPTS[selected_preset].strip(),
+        height=200,
+        disabled=True,
+        key="system_prompt_display",
+    )
+    custom_instructions = st.text_area(
+        "Custom Instructions (optional)",
+        placeholder=preset_placeholders[selected_preset],
+        height=100,
+        key="custom_instructions",
+    )
 
 # --- Health Checks ---
 st.sidebar.divider()
@@ -261,7 +333,7 @@ if run_button and query:
         with st.spinner("✍️ Generating summary..."):
             stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
             llm.callbacks = [stream_handler]
-            _ = generate_summary(llm, query, st.session_state.scraped)
+            _ = generate_summary(llm, query, st.session_state.scraped, preset=selected_preset, custom_instructions=custom_instructions)
 
     with btn_col:
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
