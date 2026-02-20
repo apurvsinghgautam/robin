@@ -1,6 +1,6 @@
 import requests
 from urllib.parse import urljoin
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_ollama import ChatOllama
 from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
@@ -15,6 +15,10 @@ from config import (
     OPENAI_API_KEY,
     ANTHROPIC_API_KEY,
     LLAMA_CPP_BASE_URL,
+    AZURE_OPENAI_API_KEY,
+    AZURE_OPENAI_ENDPOINT,
+    AZURE_OPENAI_DEPLOYMENT_NAME,
+    OPENAI_API_VERSION,
 )
 
 
@@ -150,6 +154,15 @@ _llm_config_map = {
             'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
         }
     },
+    'azure-gpt-4o': {
+        'class': AzureChatOpenAI,
+        'constructor_params': {
+            'azure_deployment': AZURE_OPENAI_DEPLOYMENT_NAME,
+            'api_version': OPENAI_API_VERSION,
+            'azure_endpoint': AZURE_OPENAI_ENDPOINT,
+            'api_key': AZURE_OPENAI_API_KEY
+        }
+    },
     # 'llama3.2': {
     #     'class': ChatOllama,
     #     'constructor_params': {'model': 'llama3.2:latest', 'base_url': OLLAMA_BASE_URL}
@@ -248,6 +261,7 @@ def get_model_choices() -> List[str]:
     anthropic_ok = _is_set(ANTHROPIC_API_KEY)
     google_ok = _is_set(GOOGLE_API_KEY)
     openrouter_ok = _is_set(OPENROUTER_API_KEY) and _is_set(OPENROUTER_BASE_URL)
+    azure_ok = _is_set(AZURE_OPENAI_API_KEY) and _is_set(AZURE_OPENAI_ENDPOINT) and _is_set(AZURE_OPENAI_DEPLOYMENT_NAME)
 
     for k, cfg in _llm_config_map.items():
         cls = cfg.get("class")
@@ -262,6 +276,12 @@ def get_model_choices() -> List[str]:
         # Direct OpenAI models
         if cls is ChatOpenAI:
             if openai_ok:
+                gated_base_models.append(k)
+            continue
+
+        # Azure OpenAI models
+        if cls is AzureChatOpenAI:
+            if azure_ok:
                 gated_base_models.append(k)
             continue
 
