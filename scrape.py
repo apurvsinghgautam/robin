@@ -79,7 +79,8 @@ def _is_safe_url(url, allow_clearweb=False, resolve_hostname=True):
 
     if not resolve_hostname:
         # Avoid local DNS lookups when traffic is already routed through Tor.
-        return True
+        # In this mode, treat non-onion hostnames as unsafe.
+        return False
 
     try:
         resolved = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
@@ -112,7 +113,9 @@ def _safe_fetch_with_redirect_policy(
         if response.status_code in {301, 302, 303, 307, 308} and response.headers.get("Location"):
             next_url = urljoin(current, response.headers["Location"])
             if not _is_safe_url(next_url, allow_clearweb=allow_clearweb, resolve_hostname=resolve_hostname):
+                response.close()
                 raise ValueError(f"Blocked redirect by security policy: {next_url}")
+            response.close()
             current = next_url
             continue
         return response
@@ -174,6 +177,7 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
         "User-Agent": random.choice(USER_AGENTS)
     }
     
+    response = None
     try:
         if use_tor:
             session = get_tor_session()
@@ -212,6 +216,9 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
         # Return title only on failure, so we don't lose the reference
         logger.debug("Failed scraping URL '%s': %s", url, e)
         scraped_text = url_data['title']
+    finally:
+        if response is not None:
+            response.close()
     
     return url, scraped_text
 

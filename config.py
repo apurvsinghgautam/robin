@@ -15,7 +15,7 @@ def _clean_env(name, default=None):
     ):
         value = value[1:-1].strip()
     return value
-	
+
 # Configuration variables loaded from the .env file
 OPENAI_API_KEY = _clean_env("OPENAI_API_KEY")
 GOOGLE_API_KEY = _clean_env("GOOGLE_API_KEY")
