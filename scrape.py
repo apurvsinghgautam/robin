@@ -53,7 +53,7 @@ def _is_private_or_local_ip(value):
     )
 
 
-def _is_safe_url(url, allow_clearweb=False):
+def _is_safe_url(url, allow_clearweb=False, resolve_hostname=True):
     parsed = urlparse(url)
     hostname = (parsed.hostname or "").lower()
 
@@ -77,6 +77,10 @@ def _is_safe_url(url, allow_clearweb=False):
     if ip_check is False:
         return True
 
+    if not resolve_hostname:
+        # Avoid local DNS lookups when traffic is already routed through Tor.
+        return True
+
     try:
         resolved = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
     except Exception:
@@ -90,8 +94,16 @@ def _is_safe_url(url, allow_clearweb=False):
     return True
 
 
-def _safe_fetch_with_redirect_policy(session, url, headers, timeout, allow_clearweb=False, max_redirects=3):
-    if not _is_safe_url(url, allow_clearweb=allow_clearweb):
+def _safe_fetch_with_redirect_policy(
+    session,
+    url,
+    headers,
+    timeout,
+    allow_clearweb=False,
+    max_redirects=3,
+    resolve_hostname=True,
+):
+    if not _is_safe_url(url, allow_clearweb=allow_clearweb, resolve_hostname=resolve_hostname):
         raise ValueError(f"Blocked URL by security policy: {url}")
 
     current = url
@@ -99,13 +111,14 @@ def _safe_fetch_with_redirect_policy(session, url, headers, timeout, allow_clear
         response = session.get(current, headers=headers, timeout=timeout, allow_redirects=False)
         if response.status_code in {301, 302, 303, 307, 308} and response.headers.get("Location"):
             next_url = urljoin(current, response.headers["Location"])
-            if not _is_safe_url(next_url, allow_clearweb=allow_clearweb):
+            if not _is_safe_url(next_url, allow_clearweb=allow_clearweb, resolve_hostname=resolve_hostname):
                 raise ValueError(f"Blocked redirect by security policy: {next_url}")
             current = next_url
             continue
         return response
 
     raise ValueError("Blocked URL due to excessive redirects")
+
 
 def get_tor_session():
     """
@@ -129,6 +142,25 @@ def get_tor_session():
     }
     return session
 
+
+def get_clearweb_session():
+    """
+    Creates a requests Session with retries and no proxy for explicit clearweb fallback.
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        read=3,
+        connect=3,
+        backoff_factor=0.3,
+        status_forcelist=[500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
 def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, control_password=None):
     """
     Scrapes a single URL using a robust Tor session.
@@ -142,8 +174,15 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
     }
     
     try:
-        session = get_tor_session()
-        timeout = 45 if use_tor else 30
+        if use_tor:
+            session = get_tor_session()
+            timeout = 45
+            resolve_hostname = False
+        else:
+            session = get_clearweb_session()
+            timeout = 30
+            resolve_hostname = True
+
         response = _safe_fetch_with_redirect_policy(
             session,
             url,
@@ -151,6 +190,7 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
             timeout=timeout,
             allow_clearweb=ALLOW_CLEARWEB_FALLBACK,
             max_redirects=3,
+            resolve_hostname=resolve_hostname,
         )
 
         if response.status_code == 200:
@@ -164,6 +204,9 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
             scraped_text = f"{url_data['title']} - {text}"
         else:
             scraped_text = url_data['title']
+    except ValueError as e:
+        logger.warning("Blocked URL by policy during scrape '%s': %s", url, e)
+        scraped_text = url_data['title']
     except Exception as e:
         # Return title only on failure, so we don't lose the reference
         logger.debug("Failed scraping URL '%s': %s", url, e)
