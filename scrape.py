@@ -167,7 +167,8 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
     Returns a tuple (url, scraped_text).
     """
     url = url_data['link']
-    use_tor = ".onion" in url
+    hostname = (urlparse(url).hostname or "").lower()
+    use_tor = hostname.endswith(".onion")
     
     headers = {
         "User-Agent": random.choice(USER_AGENTS)
