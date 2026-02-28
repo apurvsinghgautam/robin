@@ -117,7 +117,6 @@ if not model_options:
         "Set at least one in your `.env` file and restart Robin.\n\n"
         "See **Provider Configuration** below for details."
     )
-    st.stop()
 
 model = st.sidebar.selectbox(
     "Select LLM Model",

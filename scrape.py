@@ -1,15 +1,10 @@
 import random
 import requests
-import ipaddress
-import socket
-import logging
-from urllib.parse import urlparse, urljoin
+import threading
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from config import ALLOW_CLEARWEB_FALLBACK
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -26,86 +21,6 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.3179.54",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.3179.54"
 ]
-
-_BLOCKED_HOSTNAMES = {
-    "localhost",
-    "localhost.localdomain",
-    "ip6-localhost",
-    "ip6-loopback",
-}
-
-logger = logging.getLogger(__name__)
-
-
-def _is_private_or_local_ip(value):
-    try:
-        ip = ipaddress.ip_address(value)
-    except ValueError:
-        return None
-
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    )
-
-
-def _is_safe_url(url, allow_clearweb=False):
-    parsed = urlparse(url)
-    hostname = (parsed.hostname or "").lower()
-
-    if parsed.scheme not in {"http", "https"}:
-        return False
-    if not hostname:
-        return False
-
-    if hostname.endswith(".onion"):
-        return True
-
-    if not allow_clearweb:
-        return False
-
-    if hostname in _BLOCKED_HOSTNAMES:
-        return False
-
-    ip_check = _is_private_or_local_ip(hostname)
-    if ip_check is True:
-        return False
-    if ip_check is False:
-        return True
-
-    try:
-        resolved = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
-    except Exception:
-        return False
-
-    for item in resolved:
-        resolved_ip = item[4][0]
-        if _is_private_or_local_ip(resolved_ip):
-            return False
-
-    return True
-
-
-def _safe_fetch_with_redirect_policy(session, url, headers, timeout, allow_clearweb=False, max_redirects=3):
-    if not _is_safe_url(url, allow_clearweb=allow_clearweb):
-        raise ValueError(f"Blocked URL by security policy: {url}")
-
-    current = url
-    for _ in range(max_redirects + 1):
-        response = session.get(current, headers=headers, timeout=timeout, allow_redirects=False)
-        if response.status_code in {301, 302, 303, 307, 308} and response.headers.get("Location"):
-            next_url = urljoin(current, response.headers["Location"])
-            if not _is_safe_url(next_url, allow_clearweb=allow_clearweb):
-                raise ValueError(f"Blocked redirect by security policy: {next_url}")
-            current = next_url
-            continue
-        return response
-
-    raise ValueError("Blocked URL due to excessive redirects")
 
 def get_tor_session():
     """
@@ -142,16 +57,13 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
     }
     
     try:
-        session = get_tor_session()
-        timeout = 45 if use_tor else 30
-        response = _safe_fetch_with_redirect_policy(
-            session,
-            url,
-            headers=headers,
-            timeout=timeout,
-            allow_clearweb=ALLOW_CLEARWEB_FALLBACK,
-            max_redirects=3,
-        )
+        if use_tor:
+            session = get_tor_session()
+            # Increased timeout for Tor latency
+            response = session.get(url, headers=headers, timeout=45)
+        else:
+            # Fallback for clearweb if needed, though tool focuses on dark web
+            response = requests.get(url, headers=headers, timeout=30)
 
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
@@ -166,7 +78,6 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
             scraped_text = url_data['title']
     except Exception as e:
         # Return title only on failure, so we don't lose the reference
-        logger.debug("Failed scraping URL '%s': %s", url, e)
         scraped_text = url_data['title']
     
     return url, scraped_text
