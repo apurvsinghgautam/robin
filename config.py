@@ -17,3 +17,7 @@ LLAMA_CPP_BASE_URL= os.getenv("LLAMA_CPP_BASE_URL")
 # Set to "pycurl" to use libcurl (recommended for .onion sites)
 # Set to "requests" to use Python requests library
 USE_PYCURL = os.getenv("USE_PYCURL", "true").lower() in ("true", "1", "yes")
+
+# Prompt language configuration
+# Set to "en" for English or "zh" for Chinese
+PROMPT_LANGUAGE = os.getenv("PROMPT_LANGUAGE", "en")

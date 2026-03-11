@@ -8,13 +8,35 @@ from config import (
     ANTHROPIC_API_KEY,
     GOOGLE_API_KEY,
     OPENROUTER_API_KEY,
+    PROMPT_LANGUAGE,
 )
+from prompts import get_prompt
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import warnings
 
 warnings.filterwarnings("ignore")
+
+
+def parse_keywords(query):
+    """Parse multiple keywords from comma or newline separated input."""
+    if not query:
+        return []
+    keywords = re.split(r'[,\n]+', query)
+    return [k.strip() for k in keywords if k.strip()]
+
+
+def extract_keywords(llm, user_query):
+    """Extract 2-5 keywords from user query using LLM."""
+    system_prompt = get_prompt("extract_keywords", PROMPT_LANGUAGE)
+    prompt_template = ChatPromptTemplate(
+        [("system", system_prompt), ("user", "{query}")]
+    )
+    chain = prompt_template | llm | StrOutputParser()
+    result = chain.invoke({"query": user_query})
+    return parse_keywords(result)
 
 
 def get_llm(model_choice):
@@ -71,18 +93,11 @@ def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> Non
 
 
 def refine_query(llm, user_input):
-    system_prompt = """
-    You are a Cybercrime Threat Intelligence Expert. Your task is to refine the provided user query that needs to be sent to darkweb search engines. 
-    
-    Rules:
-    1. Analyze the user query and think about how it can be improved to use as search engine query
-    2. Refine the user query by adding or removing words so that it returns the best result from dark web search engines
-    3. Don't use any logical operators (AND, OR, etc.)
-    4. Keep the final refined query limited to 5 words or less
-    5. Output just the user query and nothing else
+    keywords = parse_keywords(user_input)
+    if len(keywords) > 1:
+        return refine_multi_keywords(llm, keywords)
 
-    INPUT:
-    """
+    system_prompt = get_prompt("refine_query", PROMPT_LANGUAGE)
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{query}")]
     )
@@ -90,19 +105,28 @@ def refine_query(llm, user_input):
     return chain.invoke({"query": user_input})
 
 
+def refine_multi_keywords(llm, keywords):
+    """Refine multiple keywords in parallel."""
+    system_prompt = get_prompt("refine_query", PROMPT_LANGUAGE)
+    prompt_template = ChatPromptTemplate(
+        [("system", system_prompt), ("user", "{query}")]
+    )
+    chain = prompt_template | llm | StrOutputParser()
+
+    refined = []
+    with ThreadPoolExecutor(max_workers=min(len(keywords), 5)) as executor:
+        futures = {executor.submit(chain.invoke, {"query": kw}): kw for kw in keywords}
+        for future in as_completed(futures):
+            refined.append(future.result())
+
+    return " | ".join(refined)
+
+
 def filter_results(llm, query, results):
     if not results:
         return []
 
-    system_prompt = """
-    You are a Cybercrime Threat Intelligence Expert. You are given a dark web search query and a list of search results in the form of index, link and title. 
-    Your task is select the Top 20 relevant results that best match the search query for user to investigate more.
-    Rule:
-    1. Output ONLY atmost top 20 indices (comma-separated list) no more than that that best match the input query
-
-    Search Query: {query}
-    Search Results:
-    """
+    system_prompt = get_prompt("filter_results", PROMPT_LANGUAGE)
 
     final_str = _generate_final_string(results)
 
@@ -147,6 +171,21 @@ def filter_results(llm, query, results):
     top_results = [results[i - 1] for i in parsed_indices[:20]]
 
     return top_results
+
+
+def merge_results(results_list):
+    """Merge and deduplicate results from multiple keyword searches."""
+    seen_links = {}
+    merged = []
+
+    for results in results_list:
+        for result in results:
+            link = result.get('link', '')
+            if link and link not in seen_links:
+                seen_links[link] = result
+                merged.append(result)
+
+    return merged
 
 
 def _generate_final_string(results, truncate=False):
@@ -296,7 +335,7 @@ PRESET_PROMPTS = {
 
 
 def generate_summary(llm, query, content, preset="threat_intel", custom_instructions=""):
-    system_prompt = PRESET_PROMPTS.get(preset, PRESET_PROMPTS["threat_intel"])
+    system_prompt = get_prompt("summary", PROMPT_LANGUAGE, preset)
     if custom_instructions and custom_instructions.strip():
         system_prompt = system_prompt.rstrip() + f"\n\nAdditionally focus on: {custom_instructions.strip()}"
     prompt_template = ChatPromptTemplate(

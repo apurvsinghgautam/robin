@@ -8,4 +8,6 @@ langchain-ollama
 backports.tarfile
 langchain-anthropic
 langchain_community
-langchain_google_genaipycurl
+langchain_google_genai
+pycurl
+mcp

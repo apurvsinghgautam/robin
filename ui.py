@@ -5,7 +5,7 @@ from datetime import datetime
 from scrape import scrape_multiple
 from search import get_search_results
 from llm_utils import BufferedStreamingHandler, get_model_choices
-from llm import get_llm, refine_query, filter_results, generate_summary, PRESET_PROMPTS
+from llm import get_llm, refine_query, filter_results, generate_summary, PRESET_PROMPTS, parse_keywords, merge_results, extract_keywords, refine_multi_keywords
 from config import (
     OPENAI_API_KEY,
     ANTHROPIC_API_KEY,
@@ -241,11 +241,12 @@ with logo_col:
 # Display text box and button
 with st.form("search_form", clear_on_submit=True):
     col_input, col_button = st.columns([10, 1])
-    query = col_input.text_input(
+    query = col_input.text_area(
         "Enter Dark Web Search Query",
-        placeholder="Enter Dark Web Search Query",
+        placeholder="Enter keywords (one per line or comma-separated)",
         label_visibility="collapsed",
         key="query_input",
+        height=80,
     )
     run_button = col_button.form_submit_button("Run")
 
@@ -272,34 +273,64 @@ if run_button and query:
             except Exception as e:
                 _render_pipeline_error("load the selected LLM", e)
 
-    # Stage 2 - Refine query
+    # Stage 2 - Extract keywords (if natural language query)
+    keywords = parse_keywords(query)
+    if len(keywords) == 1 and len(query.split()) > 3:
+        with status_slot.container():
+            with st.spinner("🔄 Extracting keywords..."):
+                try:
+                    keywords = extract_keywords(llm, query)
+                    st.session_state.extracted_keywords = ", ".join(keywords)
+                except Exception as e:
+                    _render_pipeline_error("extract keywords", e)
+    else:
+        st.session_state.extracted_keywords = None
+
+    # Stage 3 - Refine query
     with status_slot.container():
         with st.spinner("🔄 Refining query..."):
             try:
-                st.session_state.refined = refine_query(llm, query)
+                if len(keywords) > 1:
+                    st.session_state.refined = refine_multi_keywords(llm, keywords)
+                else:
+                    st.session_state.refined = refine_query(llm, query)
             except Exception as e:
                 _render_pipeline_error("refine the query", e)
+
+    display_text = st.session_state.refined
+    if st.session_state.extracted_keywords:
+        display_text = f"Keywords: {st.session_state.extracted_keywords}<br><br>{display_text}"
+
     p1.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Refined Query</p><p>{st.session_state.refined}</p></div>",
+        f"<div class='colHeight'><p class='pTitle'>Refined Query</p><p>{display_text}</p></div>",
         unsafe_allow_html=True,
     )
 
-    # Stage 3 - Search dark web
+    # Stage 4 - Search dark web
     with status_slot.container():
         with st.spinner("🔍 Searching dark web..."):
-            st.session_state.results = cached_search_results(
-                st.session_state.refined, threads
-            )
+            if len(keywords) > 1:
+                refined_keywords = st.session_state.refined.split(" | ")
+                all_results = []
+                for kw in refined_keywords:
+                    results = cached_search_results(kw.replace(" ", "+"), threads)
+                    all_results.append(results)
+                st.session_state.results = merge_results(all_results)
+            else:
+                st.session_state.results = cached_search_results(
+                    st.session_state.refined, threads
+                )
     p2.container(border=True).markdown(
         f"<div class='colHeight'><p class='pTitle'>Search Results</p><p>{len(st.session_state.results)}</p></div>",
         unsafe_allow_html=True,
     )
 
-    # Stage 4 - Filter results
+    # Stage 5 - Filter results
     with status_slot.container():
         with st.spinner("🗂️ Filtering results..."):
+            filter_query = st.session_state.extracted_keywords or query
             st.session_state.filtered = filter_results(
-                llm, st.session_state.refined, st.session_state.results
+                llm, filter_query, st.session_state.results
             )
     p3.container(border=True).markdown(
         f"<div class='colHeight'><p class='pTitle'>Filtered Results</p><p>{len(st.session_state.filtered)}</p></div>",
