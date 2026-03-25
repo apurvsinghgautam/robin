@@ -1,7 +1,9 @@
 
 import base64
+import json
 import streamlit as st
 from datetime import datetime
+from pathlib import Path
 from scrape import scrape_multiple
 from search import get_search_results
 from llm_utils import BufferedStreamingHandler, get_model_choices
@@ -46,6 +48,45 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
     st.stop()
 
 
+# --- Investigation persistence ---
+
+INVESTIGATIONS_DIR = Path("investigations")
+
+
+def save_investigation(query: str, refined_query: str, model: str, preset_label: str, sources: list, summary: str) -> str:
+    """Save a completed investigation to disk. Returns the filename."""
+    INVESTIGATIONS_DIR.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    fname = f"investigation_{timestamp}.json"
+    data = {
+        "timestamp": datetime.now().isoformat(),
+        "query": query,
+        "refined_query": refined_query,
+        "model": model,
+        "preset": preset_label,
+        "sources": sources,
+        "summary": summary,
+    }
+    (INVESTIGATIONS_DIR / fname).write_text(json.dumps(data, indent=2))
+    return fname
+
+
+def load_investigations() -> list:
+    """Return list of saved investigations sorted newest-first."""
+    if not INVESTIGATIONS_DIR.exists():
+        return []
+    files = sorted(INVESTIGATIONS_DIR.glob("investigation_*.json"), reverse=True)
+    investigations = []
+    for f in files:
+        try:
+            data = json.loads(f.read_text())
+            data["_filename"] = f.name
+            investigations.append(data)
+        except Exception:
+            continue
+    return investigations
+
+
 # Cache expensive backend calls
 @st.cache_data(ttl=200, show_spinner=False)
 def cached_search_results(refined_query: str, threads: int):
@@ -68,22 +109,12 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-            .colHeight {
-                max-height: 40vh;
-                overflow-y: auto;
-                text-align: center;
-            }
-            .pTitle {
-                font-weight: bold;
-                color: #FF4B4B;
-                margin-bottom: 0.5em;
-            }
             .aStyle {
                 font-size: 18px;
                 font-weight: bold;
                 padding: 5px;
                 padding-left: 0px;
-                text-align: center;
+                text-align: left;
             }
     </style>""",
     unsafe_allow_html=True,
@@ -127,6 +158,14 @@ model = st.sidebar.selectbox(
 if any(name not in {"gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"} for name in model_options):
     st.sidebar.caption("Locally detected Ollama models are automatically added to this list.")
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
+max_results = st.sidebar.slider(
+    "Max Results to Filter", 10, 100, 50, key="max_results_slider",
+    help="Cap the number of raw search results passed to the LLM filter step.",
+)
+max_scrape = st.sidebar.slider(
+    "Max Pages to Scrape", 3, 20, 10, key="max_scrape_slider",
+    help="Cap the number of filtered results that get scraped for content.",
+)
 
 st.sidebar.divider()
 st.sidebar.subheader("Provider Configuration")
@@ -232,6 +271,26 @@ if st.sidebar.button("🔍 Check Search Engines", use_container_width=True):
                         f"&ensp;🔴 **{r['name']}** — {r['error']}"
                     )
 
+# --- Past Investigations ---
+st.sidebar.divider()
+st.sidebar.subheader("📂 Past Investigations")
+saved_investigations = load_investigations()
+if saved_investigations:
+    inv_labels = [
+        f"{inv['_filename'].replace('investigation_','').replace('.json','')} — {inv['query'][:40]}"
+        for inv in saved_investigations
+    ]
+    selected_inv_label = st.sidebar.selectbox(
+        "Load investigation", ["(none)"] + inv_labels, key="inv_select"
+    )
+    if selected_inv_label != "(none)":
+        selected_inv_idx = inv_labels.index(selected_inv_label)
+        if st.sidebar.button("📂 Load", use_container_width=True, key="load_inv_btn"):
+            st.session_state["loaded_investigation"] = saved_investigations[selected_inv_idx]
+            st.rerun()
+else:
+    st.sidebar.caption("No saved investigations yet.")
+
 
 # Main UI - logo and input
 _, logo_col, _ = st.columns(3)
@@ -249,18 +308,36 @@ with st.form("search_form", clear_on_submit=True):
     )
     run_button = col_button.form_submit_button("Run")
 
-# Display a status message
+# Display loaded investigation (if any)
+if "loaded_investigation" in st.session_state and not run_button:
+    inv = st.session_state["loaded_investigation"]
+    st.info(f"📂 **{inv['query']}** — {inv['timestamp'][:16]}")
+    with st.expander("📋 Notes", expanded=False):
+        st.markdown(f"**Refined Query:** `{inv['refined_query']}`")
+        st.markdown(f"**Model:** `{inv['model']}` &nbsp;&nbsp; **Domain:** {inv['preset']}")
+        st.markdown(f"**Sources:** {len(inv['sources'])}")
+    with st.expander(f"🔗 Sources ({len(inv['sources'])} results)", expanded=False):
+        for i, item in enumerate(inv["sources"], 1):
+            title = item.get("title", "Untitled")
+            link = item.get("link", "")
+            st.markdown(f"{i}. [{title}]({link})")
+    st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
+    st.markdown(inv["summary"])
+    if st.button("✖ Clear"):
+        del st.session_state["loaded_investigation"]
+        st.rerun()
+
+# Status + result section placeholders
 status_slot = st.empty()
-# Pre-allocate three placeholders-one per card
-cols = st.columns(3)
-p1, p2, p3 = [col.empty() for col in cols]
-# Summary placeholders
-summary_container_placeholder = st.empty()
+notes_placeholder = st.empty()
+sources_placeholder = st.empty()
+findings_placeholder = st.empty()
 
 
 # Process the query
 if run_button and query:
-    # clear old state
+    # Clear any loaded investigation and old pipeline state
+    st.session_state.pop("loaded_investigation", None)
     for k in ["refined", "results", "filtered", "scraped", "streamed_summary"]:
         st.session_state.pop(k, None)
 
@@ -279,10 +356,6 @@ if run_button and query:
                 st.session_state.refined = refine_query(llm, query)
             except Exception as e:
                 _render_pipeline_error("refine the query", e)
-    p1.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Refined Query</p><p>{st.session_state.refined}</p></div>",
-        unsafe_allow_html=True,
-    )
 
     # Stage 3 - Search dark web
     with status_slot.container():
@@ -290,10 +363,9 @@ if run_button and query:
             st.session_state.results = cached_search_results(
                 st.session_state.refined, threads
             )
-    p2.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Search Results</p><p>{len(st.session_state.results)}</p></div>",
-        unsafe_allow_html=True,
-    )
+    # Cap results before LLM filter step
+    if len(st.session_state.results) > max_results:
+        st.session_state.results = st.session_state.results[:max_results]
 
     # Stage 4 - Filter results
     with status_slot.container():
@@ -301,10 +373,9 @@ if run_button and query:
             st.session_state.filtered = filter_results(
                 llm, st.session_state.refined, st.session_state.results
             )
-    p3.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Filtered Results</p><p>{len(st.session_state.filtered)}</p></div>",
-        unsafe_allow_html=True,
-    )
+    # Cap filtered results before scraping
+    if len(st.session_state.filtered) > max_scrape:
+        st.session_state.filtered = st.session_state.filtered[:max_scrape]
 
     # Stage 5 - Scrape content
     with status_slot.container():
@@ -313,32 +384,61 @@ if run_button and query:
                 st.session_state.filtered, threads
             )
 
-    # Stage 6 - Summarize
-    # 6a) Prepare session state for streaming text
+    # Stage 6 - Summarize (streaming)
     st.session_state.streamed_summary = ""
 
-    # 6c) UI callback for each chunk
+    with findings_placeholder.container():
+        st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
+        summary_slot = st.empty()
+
     def ui_emit(chunk: str):
         st.session_state.streamed_summary += chunk
         summary_slot.markdown(st.session_state.streamed_summary)
 
-    with summary_container_placeholder.container():  # border=True, height=450):
-        hdr_col, btn_col = st.columns([4, 1], vertical_alignment="center")
-        with hdr_col:
-            st.subheader(":red[Investigation Summary]", anchor=None, divider="gray")
-        summary_slot = st.empty()
-
-    # 6d) Inject your two callbacks and invoke exactly as before
     with status_slot.container():
         with st.spinner("✍️ Generating summary..."):
             stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
             llm.callbacks = [stream_handler]
-            _ = generate_summary(llm, query, st.session_state.scraped, preset=selected_preset, custom_instructions=custom_instructions)
+            _ = generate_summary(
+                llm, query, st.session_state.scraped,
+                preset=selected_preset, custom_instructions=custom_instructions,
+            )
 
-    with btn_col:
+    # Save investigation
+    _fname = save_investigation(
+        query=query,
+        refined_query=st.session_state.refined,
+        model=model,
+        preset_label=selected_preset_label,
+        sources=st.session_state.filtered,
+        summary=st.session_state.streamed_summary,
+    )
+
+    # Render organized sections
+    with notes_placeholder.container():
+        with st.expander("📋 Notes", expanded=False):
+            st.markdown(f"**Refined Query:** `{st.session_state.refined}`")
+            st.markdown(f"**Model:** `{model}` &nbsp;&nbsp; **Domain:** {selected_preset_label}")
+            st.markdown(
+                f"**Results found:** {len(st.session_state.results)} &nbsp;&nbsp; "
+                f"**Filtered to:** {len(st.session_state.filtered)} &nbsp;&nbsp; "
+                f"**Scraped:** {len(st.session_state.scraped)}"
+            )
+
+    with sources_placeholder.container():
+        with st.expander(f"🔗 Sources ({len(st.session_state.filtered)} results)", expanded=False):
+            for i, item in enumerate(st.session_state.filtered, 1):
+                title = item.get("title", "Untitled")
+                link = item.get("link", "")
+                st.markdown(f"{i}. [{title}]({link})")
+
+    with findings_placeholder.container():
+        st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
+        st.markdown(st.session_state.streamed_summary)
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         fname = f"summary_{now}.md"
         b64 = base64.b64encode(st.session_state.streamed_summary.encode()).decode()
         href = f'<div class="aStyle">📥 <a href="data:file/markdown;base64,{b64}" download="{fname}">Download</a></div>'
         st.markdown(href, unsafe_allow_html=True)
-    status_slot.success("✔️ Pipeline completed successfully!")
+
+    status_slot.success(f"✔️ Pipeline completed successfully! Investigation saved as `{_fname}`")
