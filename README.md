@@ -40,7 +40,10 @@
 > [!TIP]
 > You can provide your LLM of choice API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
 >
+> Use plain values in `.env` (no extra spaces). Quotes are optional, but accidental trailing characters can break auth.
+>
 > For Ollama, provide `http://host.docker.internal:11434` as `OLLAMA_BASE_URL` in your env if running using docker method or `http://127.0.0.1:11434` for other methods. You might need to serve Ollama on 0.0.0.0 depending on your OS. You can do by running `OLLAMA_HOST=0.0.0.0 ollama serve &` in your terminal.
+> To explicitly allow scraping non-onion links (disabled by default), set `ALLOW_CLEARWEB_FALLBACK=true`.
 
 ### Docker [Recommended]
 
