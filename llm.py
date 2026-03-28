@@ -62,6 +62,13 @@ def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> Non
         _require(ANTHROPIC_API_KEY, "ANTHROPIC_API_KEY", "Anthropic")
     elif "ChatGoogleGenerativeAI" in class_name:
         _require(GOOGLE_API_KEY, "GOOGLE_API_KEY", "Google Gemini")
+    elif "AzureChatOpenAI" in class_name:
+        if not (model_params.get("api_key") and model_params.get("azure_endpoint") and model_params.get("azure_deployment")):
+            raise ValueError(
+                f"Azure OpenAI model '{model_choice}' selected but required keys "
+                "(`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_NAME`) are not fully set.\n"
+                "Add them to your .env file or export them before running the app."
+            )
     elif "ChatOpenAI" in class_name:
         base_url = (model_params or {}).get("base_url", "").lower()
         if "openrouter" in base_url:
