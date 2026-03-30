@@ -174,7 +174,13 @@ def scrape_multiple(urls_data, max_workers=5):
             try:
                 url, content = future.result()
                 if len(content) > MAX_RETURN_CHARS:
-                    content = content[:MAX_RETURN_CHARS] + "...(truncated)"
+                    suffix = "...(truncated)"
+                    if len(suffix) >= MAX_RETURN_CHARS:
+                        # Fallback: ensure we never exceed MAX_RETURN_CHARS even if suffix is long
+                        content = suffix[:MAX_RETURN_CHARS]
+                    else:
+                        available = MAX_RETURN_CHARS - len(suffix)
+                        content = content[:available] + suffix
                 results[url] = content
             except Exception:
                 continue
