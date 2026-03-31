@@ -8,6 +8,9 @@ from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import warnings
+warnings.filterwarnings("ignore")
+
 # Define a list of rotating user agents.
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
@@ -132,7 +135,7 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
             scraped_text = f"{title} - {text}" if text else title
         else:
             scraped_text = title
-    except (requests.RequestException, ValueError) as exc:
+    except Exception as exc:
         # Return title only on failure, so we don't lose the reference
         _logger.debug("Failed to scrape url=%s: %s", url, exc)
         scraped_text = title
