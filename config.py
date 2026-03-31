@@ -24,9 +24,3 @@ OLLAMA_BASE_URL = _clean_env("OLLAMA_BASE_URL")
 OPENROUTER_BASE_URL = _clean_env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 OPENROUTER_API_KEY = _clean_env("OPENROUTER_API_KEY")
 LLAMA_CPP_BASE_URL = _clean_env("LLAMA_CPP_BASE_URL")
-ALLOW_CLEARWEB_FALLBACK = str(_clean_env("ALLOW_CLEARWEB_FALLBACK", "false")).strip().lower() in {
-	"1",
-	"true",
-	"yes",
-	"on",
-}
