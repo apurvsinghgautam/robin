@@ -164,11 +164,22 @@ def scrape_multiple(urls_data, max_workers=5):
     """
     results = {}
     max_workers = max(1, min(int(max_workers), 16))
+    safe_urls_data = []
+
+    # Early-return behavior for unsafe URLs in batch mode.
+    for url_data in urls_data:
+        url = url_data.get("link", "")
+        title = url_data.get("title", "Untitled")
+        if not _is_safe_url(url):
+            if url:
+                results[url] = title
+            continue
+        safe_urls_data.append(url_data)
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_url = {
             executor.submit(scrape_single, url_data): url_data
-            for url_data in urls_data
+            for url_data in safe_urls_data
         }
         for future in as_completed(future_to_url):
             try:
