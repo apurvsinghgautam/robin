@@ -69,12 +69,6 @@ def _get_session(use_tor=False):
     return getattr(_thread_local, key)
 
 
-def get_tor_session():
-    """
-    Creates a requests Session with Tor SOCKS proxy and automatic retries.
-    """
-    return _build_session(use_tor=True)
-
 def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, control_password=None):
     """
     Scrapes a single URL using a robust Tor session.
