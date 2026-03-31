@@ -31,8 +31,10 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
 
     if any(token in lower_msg for token in ("anthropic", "x-api-key", "invalid api key", "authentication")):
         hints.insert(0, "- Claude/Anthropic models require a valid `ANTHROPIC_API_KEY`.")
-    elif "openrouter" in lower_msg:
-        hints.insert(0, "- OpenRouter models require `OPENROUTER_API_KEY` and a reachable OpenRouter endpoint.")
+    elif "openrouter" in lower_msg or "user not found" in lower_msg or "code: 401" in lower_msg:
+        hints.insert(0, "- OpenRouter 401/User not found usually means the API key is invalid/expired or has leading/trailing characters.")
+        hints.insert(1, "- Set `OPENROUTER_API_KEY` without extra spaces and verify the key is active in your OpenRouter account.")
+        hints.insert(2, "- Keep `OPENROUTER_BASE_URL` as `https://openrouter.ai/api/v1` unless you intentionally use a custom gateway.")
     elif "openai" in lower_msg or "gpt" in lower_msg:
         hints.insert(0, "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.")
     elif "google" in lower_msg or "gemini" in lower_msg:
@@ -148,6 +150,7 @@ if not model_options:
         "Set at least one in your `.env` file and restart Robin.\n\n"
         "See **Provider Configuration** below for details."
     )
+    st.stop()
 
 model = st.sidebar.selectbox(
     "Select LLM Model",
