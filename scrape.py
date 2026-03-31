@@ -91,12 +91,12 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
         return url, title
 
     use_tor = (urlparse(url).hostname or "").lower().endswith(".onion")
-    
+
     headers = {
         "User-Agent": random.choice(USER_AGENTS),
         "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
     }
-    
+
     response = None
     try:
         session = _get_session(use_tor=use_tor)
@@ -142,7 +142,7 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
     finally:
         if response is not None:
             response.close()
-    
+
     return url, scraped_text
 
 def scrape_multiple(urls_data, max_workers=5):
@@ -163,7 +163,7 @@ def scrape_multiple(urls_data, max_workers=5):
             continue
         seen_links.add(url)
         unique_urls_data.append({"link": url, "title": title})
-    
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_url = {
             executor.submit(scrape_single, url_data): url_data
@@ -186,5 +186,6 @@ def scrape_multiple(urls_data, max_workers=5):
             except Exception as exc:
                 _logger.debug("Worker failed to scrape a URL: %s", exc)
                 continue
-                
+
     return results
+    
