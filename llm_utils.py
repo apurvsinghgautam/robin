@@ -39,7 +39,30 @@ def sanitize_input(text: str, max_length: int = 50000) -> str:
     """
     if not isinstance(text, str):
         text = str(text) if text is not None else ""
-
+        
+    # Remove null bytes and control characters (except common whitespace)
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+    
+    # Remove harmful prompt injection patterns
+    dangerous_patterns = [
+        r'(?i)ignore.*(?:previous|prior|above|instructions?)',  # Ignore previous instructions
+        r'(?i)(?:system|assistant|user):\s*(?:you are|respond)',  # Role reassignment
+        r'(?i)(?:pay no attention|disregard|forget)',  # Dismissal patterns
+        r'(?i)(?:new instructions?|override|execute)',  # Command override
+        r'(?i)\[SYSTEM\]|\[ADMIN\]|\[URGENT\]',  # Fake system markers
+        r'(?i)json_mode|raw_output|code_mode',  # Mode switching attempts
+    ]
+    
+    for pattern in dangerous_patterns:
+        text = re.sub(pattern, '', text, flags=re.MULTILINE)
+    
+    # Remove consecutive backticks/backticks that could escape markdown
+    text = re.sub(r'```+', '`', text)
+    
+    # Normalize whitespace (preserve structure but remove excessive spacing)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r'[ \t]{2,}', ' ', text)
+    
 
 
 
