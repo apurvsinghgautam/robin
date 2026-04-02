@@ -1,13 +1,20 @@
-
 import base64
 import json
 import streamlit as st
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from scrape import scrape_multiple
-from search import get_search_results
-from llm_utils import BufferedStreamingHandler, get_model_choices
-from llm import get_llm, refine_query, filter_results, generate_summary, PRESET_PROMPTS
+from search import get_search_results, get_deep_search_results
+from llm_utils import get_model_choices
+from llm import (
+    get_llm,
+    refine_query,
+    filter_results,
+    generate_mode_summary,
+    PRESET_PROMPTS,
+)
 from config import (
     OPENAI_API_KEY,
     ANTHROPIC_API_KEY,
@@ -53,9 +60,10 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
 # --- Investigation persistence ---
 
 INVESTIGATIONS_DIR = Path("investigations")
+SESSIONS_DIR = Path("sessions")
 
 
-def save_investigation(query: str, refined_query: str, model: str, preset_label: str, sources: list, summary: str) -> str:
+def save_investigation(query: str, refined_query: str, model: str, preset_label: str, sources: list, summary) -> str:
     """Save a completed investigation to disk. Returns the filename."""
     INVESTIGATIONS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -87,6 +95,47 @@ def load_investigations() -> list:
         except Exception:
             continue
     return investigations
+
+
+def _get_session_id() -> str:
+    sid = st.session_state.get("robin_session_id")
+    if sid:
+        return sid
+    sid = datetime.now().strftime("%Y%m%d") + "-" + str(uuid4())[:8]
+    st.session_state["robin_session_id"] = sid
+    return sid
+
+
+def _session_file(session_id: str) -> Path:
+    SESSIONS_DIR.mkdir(exist_ok=True)
+    return SESSIONS_DIR / f"session_{session_id}.json"
+
+
+def load_session_history(session_id: str) -> list:
+    fpath = _session_file(session_id)
+    if not fpath.exists():
+        return []
+    try:
+        payload = json.loads(fpath.read_text())
+        return payload.get("messages", []) if isinstance(payload, dict) else []
+    except Exception:
+        return []
+
+
+def append_session_history(session_id: str, record: dict) -> None:
+    fpath = _session_file(session_id)
+    existing = {"session_id": session_id, "messages": []}
+    if fpath.exists():
+        try:
+            loaded = json.loads(fpath.read_text())
+            if isinstance(loaded, dict):
+                existing = loaded
+                existing.setdefault("messages", [])
+        except Exception:
+            pass
+    existing["messages"].append(record)
+    existing["updated_at"] = datetime.now().isoformat()
+    fpath.write_text(json.dumps(existing, indent=2))
 
 
 # Cache expensive backend calls
@@ -168,6 +217,18 @@ max_results = st.sidebar.slider(
 max_scrape = st.sidebar.slider(
     "Max Pages to Scrape", 3, 20, 10, key="max_scrape_slider",
     help="Cap the number of filtered results that get scraped for content.",
+)
+deep_research_mode = st.sidebar.toggle(
+    "Deep Research Search",
+    value=True,
+    help="Expand discovery by recursively crawling onion links from initial search results.",
+)
+research_depth = st.sidebar.slider(
+    "Deep Crawl Depth",
+    0,
+    2,
+    1,
+    help="0 disables crawl expansion, 1-2 increases coverage and runtime.",
 )
 
 st.sidebar.divider()
@@ -294,6 +355,19 @@ if saved_investigations:
 else:
     st.sidebar.caption("No saved investigations yet.")
 
+st.sidebar.divider()
+st.sidebar.subheader("💬 Session History")
+active_session_id = _get_session_id()
+session_history = load_session_history(active_session_id)
+st.sidebar.caption(f"Session: {active_session_id}")
+if session_history:
+    for idx, item in enumerate(reversed(session_history[-6:]), 1):
+        ts = item.get("timestamp", "")[:16].replace("T", " ")
+        q = item.get("query", "")[:45]
+        st.sidebar.markdown(f"{idx}. {ts} - {q}")
+else:
+    st.sidebar.caption("No messages in this session yet.")
+
 
 # Main UI - logo and input
 _, logo_col, _ = st.columns(3)
@@ -325,7 +399,15 @@ if "loaded_investigation" in st.session_state and not run_button:
             link = item.get("link", "")
             st.markdown(f"{i}. [{title}]({link})")
     st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
-    st.markdown(inv["summary"])
+    summary_payload = inv.get("summary")
+    if isinstance(summary_payload, dict):
+        tab_filtered, tab_risky = st.tabs(["Filtered", "Risky"])
+        with tab_filtered:
+            st.markdown(summary_payload.get("filtered", "No filtered output saved."))
+        with tab_risky:
+            st.markdown(summary_payload.get("risky", "No risky output saved."))
+    else:
+        st.markdown(summary_payload or "No summary found.")
     if st.button("✖ Clear"):
         del st.session_state["loaded_investigation"]
         st.rerun()
@@ -341,7 +423,7 @@ findings_placeholder = st.empty()
 if run_button and query:
     # Clear any loaded investigation and old pipeline state
     st.session_state.pop("loaded_investigation", None)
-    for k in ["refined", "results", "filtered", "scraped", "streamed_summary"]:
+    for k in ["refined", "results", "filtered", "scraped", "filtered_summary", "risky_summary"]:
         st.session_state.pop(k, None)
 
     # Stage 1 - Load LLM
@@ -362,10 +444,19 @@ if run_button and query:
 
     # Stage 3 - Search dark web
     with status_slot.container():
-        with st.spinner("🔍 Searching dark web..."):
-            st.session_state.results = cached_search_results(
-                st.session_state.refined, threads
-            )
+        search_label = "🔍 Searching dark web (deep mode)..." if deep_research_mode else "🔍 Searching dark web..."
+        with st.spinner(search_label):
+            if deep_research_mode:
+                st.session_state.results = get_deep_search_results(
+                    st.session_state.refined,
+                    max_workers=threads,
+                    crawl_depth=research_depth,
+                    max_seed_links=max_results,
+                )
+            else:
+                st.session_state.results = cached_search_results(
+                    st.session_state.refined, threads
+                )
     # Cap results before LLM filter step
     if len(st.session_state.results) > max_results:
         st.session_state.results = st.session_state.results[:max_results]
@@ -387,25 +478,57 @@ if run_button and query:
                 st.session_state.filtered, threads
             )
 
-    # Stage 6 - Summarize (streaming)
-    st.session_state.streamed_summary = ""
+    # Stage 6 - Dual summarize in parallel (Filtered + Risky)
+    st.session_state.filtered_summary = ""
+    st.session_state.risky_summary = ""
 
     with findings_placeholder.container():
         st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
-        summary_slot = st.empty()
-
-    def ui_emit(chunk: str):
-        st.session_state.streamed_summary += chunk
-        summary_slot.markdown(st.session_state.streamed_summary)
+        summary_status = st.info("Running Filtered and Risky analysis in parallel...")
 
     with status_slot.container():
-        with st.spinner("✍️ Generating summary..."):
-            stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
-            llm.callbacks = [stream_handler]
-            _ = generate_summary(
-                llm, query, st.session_state.scraped,
-                preset=selected_preset, custom_instructions=custom_instructions,
-            )
+        with st.spinner("✍️ Generating Filtered + Risky summaries..."):
+            try:
+                llm_filtered = get_llm(model)
+                llm_risky = get_llm(model)
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    futures = {
+                        executor.submit(
+                            generate_mode_summary,
+                            llm_filtered,
+                            query,
+                            st.session_state.scraped,
+                            "filtered",
+                            selected_preset,
+                            custom_instructions,
+                        ): "filtered",
+                        executor.submit(
+                            generate_mode_summary,
+                            llm_risky,
+                            query,
+                            st.session_state.scraped,
+                            "risky",
+                            selected_preset,
+                            custom_instructions,
+                        ): "risky",
+                    }
+
+                    for future in as_completed(futures):
+                        mode = futures[future]
+                        result = future.result()
+                        if mode == "filtered":
+                            st.session_state.filtered_summary = result
+                        else:
+                            st.session_state.risky_summary = result
+            except Exception as e:
+                _render_pipeline_error("generate dual summaries", e)
+
+    summary_status.success("Parallel analysis completed.")
+
+    dual_summary_payload = {
+        "filtered": st.session_state.filtered_summary,
+        "risky": st.session_state.risky_summary,
+    }
 
     # Save investigation
     _fname = save_investigation(
@@ -414,7 +537,22 @@ if run_button and query:
         model=model,
         preset_label=selected_preset_label,
         sources=st.session_state.filtered,
-        summary=st.session_state.streamed_summary,
+        summary=dual_summary_payload,
+    )
+
+    append_session_history(
+        active_session_id,
+        {
+            "timestamp": datetime.now().isoformat(),
+            "query": query,
+            "refined_query": st.session_state.refined,
+            "model": model,
+            "preset": selected_preset,
+            "deep_research": deep_research_mode,
+            "research_depth": research_depth,
+            "summary": dual_summary_payload,
+            "source_count": len(st.session_state.filtered),
+        },
     )
 
     # Render organized sections
@@ -427,6 +565,10 @@ if run_button and query:
                 f"**Filtered to:** {len(st.session_state.filtered)} &nbsp;&nbsp; "
                 f"**Scraped:** {len(st.session_state.scraped)}"
             )
+            st.markdown(
+                f"**Search Mode:** {'Deep Research' if deep_research_mode else 'Standard'} &nbsp;&nbsp; "
+                f"**Depth:** {research_depth}"
+            )
 
     with sources_placeholder.container():
         with st.expander(f"🔗 Sources ({len(st.session_state.filtered)} results)", expanded=False):
@@ -437,10 +579,20 @@ if run_button and query:
 
     with findings_placeholder.container():
         st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
-        st.markdown(st.session_state.streamed_summary)
+        tab_filtered, tab_risky = st.tabs(["Filtered", "Risky"])
+        with tab_filtered:
+            st.markdown(st.session_state.filtered_summary)
+        with tab_risky:
+            st.markdown(st.session_state.risky_summary)
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         fname = f"summary_{now}.md"
-        b64 = base64.b64encode(st.session_state.streamed_summary.encode()).decode()
+        combined = (
+            "# Filtered\n\n"
+            + st.session_state.filtered_summary
+            + "\n\n# Risky\n\n"
+            + st.session_state.risky_summary
+        )
+        b64 = base64.b64encode(combined.encode()).decode()
         href = f'<div class="aStyle">📥 <a href="data:file/markdown;base64,{b64}" download="{fname}">Download</a></div>'
         st.markdown(href, unsafe_allow_html=True)
 
