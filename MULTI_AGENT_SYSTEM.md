@@ -1,4 +1,4 @@
-># Robin Enhanced Multi-Agent System Documentation
+# Robin Enhanced Multi-Agent System Documentation
 
 ## System Architecture
 

@@ -1,4 +1,4 @@
-># Robin Multi-Agent Threat Intelligence System
+# Robin Multi-Agent Threat Intelligence System
 
 ## Overview
 
