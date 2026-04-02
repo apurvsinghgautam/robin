@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from urllib.parse import urlparse
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -112,3 +113,71 @@ def get_search_results(refined_query, max_workers=5):
             unique_results.append(res)
             
     return unique_results
+
+
+def _extract_onion_links_from_page(url, timeout=35):
+    """Fetch a .onion page through Tor and extract outbound onion links."""
+    if not url:
+        return []
+    host = (urlparse(url).hostname or "").lower()
+    if not host.endswith(".onion"):
+        return []
+
+    session = get_tor_session()
+    headers = {"User-Agent": random.choice(USER_AGENTS)}
+    try:
+        response = session.get(url, headers=headers, timeout=timeout)
+        if response.status_code != 200:
+            return []
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        discovered = []
+        for a in soup.find_all("a"):
+            href = (a.get("href") or "").strip()
+            title = a.get_text(strip=True)
+            if not href:
+                continue
+            matches = re.findall(r"https?:\/\/[a-z0-9\.\-]+\.onion[^\s\"'<>]*", href, flags=re.IGNORECASE)
+            for link in matches:
+                clean_link = link.rstrip("/")
+                if "search" in clean_link.lower():
+                    continue
+                discovered.append({"title": title or "Discovered .onion link", "link": clean_link})
+        return discovered
+    except Exception:
+        return []
+
+
+def get_deep_search_results(refined_query, max_workers=5, crawl_depth=1, max_seed_links=30):
+    """
+    Run multi-engine search, then recursively discover additional onion links
+    from returned pages to broaden coverage.
+    """
+    seed_results = get_search_results(refined_query, max_workers=max_workers)
+    if crawl_depth <= 0 or not seed_results:
+        return seed_results
+
+    all_results = list(seed_results)
+    seen = {item.get("link", "").rstrip("/") for item in seed_results if item.get("link")}
+    frontier = [item for item in seed_results if item.get("link")][:max_seed_links]
+
+    for _ in range(max(0, int(crawl_depth))):
+        if not frontier:
+            break
+
+        next_frontier = []
+        with ThreadPoolExecutor(max_workers=max(1, min(int(max_workers), 16))) as executor:
+            futures = [executor.submit(_extract_onion_links_from_page, item.get("link", "")) for item in frontier]
+            for future in as_completed(futures):
+                for candidate in future.result() or []:
+                    link = (candidate.get("link") or "").rstrip("/")
+                    if not link or link in seen:
+                        continue
+                    seen.add(link)
+                    all_results.append(candidate)
+                    next_frontier.append(candidate)
+
+        # Keep recursion bounded to avoid runaway crawling.
+        frontier = next_frontier[:max_seed_links]
+
+    return all_results
