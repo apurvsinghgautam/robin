@@ -7,6 +7,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.callbacks.base import BaseCallbackHandler
 import os
+import re
 from config import (
     OLLAMA_BASE_URL,
     OPENROUTER_BASE_URL,
@@ -17,7 +18,10 @@ from config import (
     LLAMA_CPP_BASE_URL,
 )
 
-#  INPUT SANITIZATION FOR PROMPT INJECTION PREVENTION !!
+
+# ============================================================================
+# INPUT SANITIZATION FOR PROMPT INJECTION PREVENTION
+# ============================================================================
 
 def sanitize_input(text: str, max_length: int = 50000) -> str:
     """
@@ -39,7 +43,7 @@ def sanitize_input(text: str, max_length: int = 50000) -> str:
     """
     if not isinstance(text, str):
         text = str(text) if text is not None else ""
-        
+    
     # Remove null bytes and control characters (except common whitespace)
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
     
@@ -62,7 +66,7 @@ def sanitize_input(text: str, max_length: int = 50000) -> str:
     # Normalize whitespace (preserve structure but remove excessive spacing)
     text = re.sub(r'\n{3,}', '\n\n', text)
     text = re.sub(r'[ \t]{2,}', ' ', text)
-
+    
     # Strip leading/trailing whitespace
     text = text.strip()
     
@@ -71,6 +75,7 @@ def sanitize_input(text: str, max_length: int = 50000) -> str:
         text = text[:max_length] + f'\n\n[Content truncated - exceeded {max_length} characters]'
     
     return text
+
 
 class BufferedStreamingHandler(BaseCallbackHandler):
     def __init__(self, buffer_limit: int = 60, ui_callback: Optional[Callable[[str], None]] = None):
