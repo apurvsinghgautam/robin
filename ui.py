@@ -1,3 +1,4 @@
+
 import base64
 import json
 import streamlit as st
@@ -15,6 +16,8 @@ from llm import (
     generate_mode_summary,
     PRESET_PROMPTS,
 )
+from agent_orchestrator import InvestigationOrchestrator
+from agents import list_available_agents, get_agent
 from config import (
     OPENAI_API_KEY,
     ANTHROPIC_API_KEY,
@@ -231,6 +234,12 @@ research_depth = st.sidebar.slider(
     help="0 disables crawl expansion, 1-2 increases coverage and runtime.",
 )
 
+multi_agent_mode = st.sidebar.toggle(
+    "🔬 Multi-Agent Investigation Mode",
+    value=False,
+    help="Deploy specialized agent team (REAPER→TRACE→LEDGER→FLUX→MASON→VEIL→BISHOP→GHOST) for comprehensive analysis.",
+)
+
 st.sidebar.divider()
 st.sidebar.subheader("Provider Configuration")
 _providers = [
@@ -423,7 +432,7 @@ findings_placeholder = st.empty()
 if run_button and query:
     # Clear any loaded investigation and old pipeline state
     st.session_state.pop("loaded_investigation", None)
-    for k in ["refined", "results", "filtered", "scraped", "filtered_summary", "risky_summary"]:
+    for k in ["refined", "results", "filtered", "scraped", "filtered_summary", "risky_summary", "multi_agent_report"]:
         st.session_state.pop(k, None)
 
     # Stage 1 - Load LLM
@@ -434,166 +443,300 @@ if run_button and query:
             except Exception as e:
                 _render_pipeline_error("load the selected LLM", e)
 
-    # Stage 2 - Refine query
-    with status_slot.container():
-        with st.spinner("🔄 Refining query..."):
-            try:
-                st.session_state.refined = refine_query(llm, query)
-            except Exception as e:
-                _render_pipeline_error("refine the query", e)
-
-    # Stage 3 - Search dark web
-    with status_slot.container():
-        search_label = "🔍 Searching dark web (deep mode)..." if deep_research_mode else "🔍 Searching dark web..."
-        with st.spinner(search_label):
-            if deep_research_mode:
-                st.session_state.results = get_deep_search_results(
-                    st.session_state.refined,
-                    max_workers=threads,
-                    crawl_depth=research_depth,
-                    max_seed_links=max_results,
+    # =============================================================================
+    # MULTI-AGENT INVESTIGATION MODE
+    # =============================================================================
+    if multi_agent_mode:
+        with status_slot.container():
+            st.info("🔬 Deploying multi-agent investigation team...")
+        
+        # Initialize orchestrator
+        orchestrator = InvestigationOrchestrator(llm)
+        
+        # Stage A - Initial search and scrape (same as standard mode)
+        with status_slot.container():
+            with st.spinner("🔍 Initial search (multi-agent mode)..."):
+                try:
+                    st.session_state.refined = refine_query(llm, query)
+                except Exception as e:
+                    _render_pipeline_error("refine query", e)
+        
+        with status_slot.container():
+            search_label = "🔍 Searching dark web (deep + multi-agent)..." if deep_research_mode else "🔍 Searching dark web..."
+            with st.spinner(search_label):
+                if deep_research_mode:
+                    st.session_state.results = get_deep_search_results(
+                        st.session_state.refined,
+                        max_workers=threads,
+                        crawl_depth=research_depth,
+                        max_seed_links=max_results,
+                    )
+                else:
+                    st.session_state.results = cached_search_results(
+                        st.session_state.refined, threads
+                    )
+        
+        if len(st.session_state.results) > max_results:
+            st.session_state.results = st.session_state.results[:max_results]
+        
+        with status_slot.container():
+            with st.spinner("🗂️ Filtering results..."):
+                st.session_state.filtered = filter_results(
+                    llm, st.session_state.refined, st.session_state.results
                 )
-            else:
-                st.session_state.results = cached_search_results(
-                    st.session_state.refined, threads
+        
+        if len(st.session_state.filtered) > max_scrape:
+            st.session_state.filtered = st.session_state.filtered[:max_scrape]
+        
+        with status_slot.container():
+            with st.spinner("📜 Scraping content..."):
+                st.session_state.scraped = cached_scrape_multiple(
+                    st.session_state.filtered, threads
                 )
-    # Cap results before LLM filter step
-    if len(st.session_state.results) > max_results:
-        st.session_state.results = st.session_state.results[:max_results]
-
-    # Stage 4 - Filter results
-    with status_slot.container():
-        with st.spinner("🗂️ Filtering results..."):
-            st.session_state.filtered = filter_results(
-                llm, st.session_state.refined, st.session_state.results
-            )
-    # Cap filtered results before scraping
-    if len(st.session_state.filtered) > max_scrape:
-        st.session_state.filtered = st.session_state.filtered[:max_scrape]
-
-    # Stage 5 - Scrape content
-    with status_slot.container():
-        with st.spinner("📜 Scraping content..."):
-            st.session_state.scraped = cached_scrape_multiple(
-                st.session_state.filtered, threads
-            )
-
-    # Stage 6 - Dual summarize in parallel (Filtered + Risky)
-    st.session_state.filtered_summary = ""
-    st.session_state.risky_summary = ""
-
-    with findings_placeholder.container():
-        st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
-        summary_status = st.info("Running Filtered and Risky analysis in parallel...")
-
-    with status_slot.container():
-        with st.spinner("✍️ Generating Filtered + Risky summaries..."):
-            try:
-                llm_filtered = get_llm(model)
-                llm_risky = get_llm(model)
-                with ThreadPoolExecutor(max_workers=2) as executor:
-                    futures = {
-                        executor.submit(
-                            generate_mode_summary,
-                            llm_filtered,
-                            query,
-                            st.session_state.scraped,
-                            "filtered",
-                            selected_preset,
-                            custom_instructions,
-                        ): "filtered",
-                        executor.submit(
-                            generate_mode_summary,
-                            llm_risky,
-                            query,
-                            st.session_state.scraped,
-                            "risky",
-                            selected_preset,
-                            custom_instructions,
-                        ): "risky",
-                    }
-
-                    for future in as_completed(futures):
-                        mode = futures[future]
-                        result = future.result()
-                        if mode == "filtered":
-                            st.session_state.filtered_summary = result
-                        else:
-                            st.session_state.risky_summary = result
-            except Exception as e:
-                _render_pipeline_error("generate dual summaries", e)
-
-    summary_status.success("Parallel analysis completed.")
-
-    dual_summary_payload = {
-        "filtered": st.session_state.filtered_summary,
-        "risky": st.session_state.risky_summary,
-    }
-
-    # Save investigation
-    _fname = save_investigation(
-        query=query,
-        refined_query=st.session_state.refined,
-        model=model,
-        preset_label=selected_preset_label,
-        sources=st.session_state.filtered,
-        summary=dual_summary_payload,
-    )
-
-    append_session_history(
-        active_session_id,
-        {
-            "timestamp": datetime.now().isoformat(),
-            "query": query,
-            "refined_query": st.session_state.refined,
-            "model": model,
-            "preset": selected_preset,
-            "deep_research": deep_research_mode,
-            "research_depth": research_depth,
-            "summary": dual_summary_payload,
-            "source_count": len(st.session_state.filtered),
-        },
-    )
-
-    # Render organized sections
-    with notes_placeholder.container():
-        with st.expander("📋 Notes", expanded=False):
-            st.markdown(f"**Refined Query:** `{st.session_state.refined}`")
-            st.markdown(f"**Model:** `{model}` &nbsp;&nbsp; **Domain:** {selected_preset_label}")
-            st.markdown(
-                f"**Results found:** {len(st.session_state.results)} &nbsp;&nbsp; "
-                f"**Filtered to:** {len(st.session_state.filtered)} &nbsp;&nbsp; "
-                f"**Scraped:** {len(st.session_state.scraped)}"
-            )
-            st.markdown(
-                f"**Search Mode:** {'Deep Research' if deep_research_mode else 'Standard'} &nbsp;&nbsp; "
-                f"**Depth:** {research_depth}"
-            )
-
-    with sources_placeholder.container():
-        with st.expander(f"🔗 Sources ({len(st.session_state.filtered)} results)", expanded=False):
-            for i, item in enumerate(st.session_state.filtered, 1):
-                title = item.get("title", "Untitled")
-                link = item.get("link", "")
-                st.markdown(f"{i}. [{title}]({link})")
-
-    with findings_placeholder.container():
-        st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
-        tab_filtered, tab_risky = st.tabs(["Filtered", "Risky"])
-        with tab_filtered:
-            st.markdown(st.session_state.filtered_summary)
-        with tab_risky:
-            st.markdown(st.session_state.risky_summary)
-        now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        fname = f"summary_{now}.md"
-        combined = (
-            "# Filtered\n\n"
-            + st.session_state.filtered_summary
-            + "\n\n# Risky\n\n"
-            + st.session_state.risky_summary
+        
+        # Stage B - Deploy agent team
+        combined_scraped_data = " ".join(
+            [f"{url}: {content}" for url, content in st.session_state.scraped.items()]
         )
-        b64 = base64.b64encode(combined.encode()).decode()
-        href = f'<div class="aStyle">📥 <a href="data:file/markdown;base64,{b64}" download="{fname}">Download</a></div>'
-        st.markdown(href, unsafe_allow_html=True)
+        
+        orchestrator.initialize_context(query, combined_scraped_data)
+        
+        with findings_placeholder.container():
+            st.subheader("🔬 Multi-Agent Investigation", anchor=None, divider="gray")
+            agent_progress = st.empty()
+            agent_container = st.container()
+        
+        with status_slot.container():
+            with st.spinner("🔬 Deploying agent team (8 agents in sequence)..."):
+                try:
+                    # Show agent roster
+                    agent_status = st.empty()
+                    agent_cards = []
+                    
+                    investigation_result = orchestrator.run_dark_web_investigation_workflow()
+                    
+                    st.session_state.multi_agent_report = investigation_result
+                    
+                    with agent_container:
+                        # Display agent findings in cards
+                        cols = st.columns(2)
+                        for idx, agent_result in enumerate(investigation_result["workflow"]):
+                            col = cols[idx % 2]
+                            with col:
+                                agent_name = agent_result.get("agent", "Unknown")
+                                status_icon = "✅" if agent_result.get("status") == "success" else "❌"
+                                with st.expander(f"{status_icon} {agent_name}"):
+                                    if agent_result.get("status") == "success":
+                                        st.markdown(agent_result.get("findings", "No findings"))
+                                    else:
+                                        st.error(f"Error: {agent_result.get('error', 'Unknown error')}")
+                        
+                        st.divider()
+                        st.subheader("📊 Integrated Multi-Agent Report")
+                        st.markdown(investigation_result.get("final_report", "Report generation failed."))
+                        
+                        # Workflow log
+                        with st.expander("📋 Workflow Log"):
+                            for entry in investigation_result.get("timeline", []):
+                                st.text(f"{entry['timestamp']} — {entry['agent']}: {entry['status']}")
+                
+                except Exception as e:
+                    _render_pipeline_error("run multi-agent investigation", e)
+        
+        # Save multi-agent investigation
+        _fname = save_investigation(
+            query=query,
+            refined_query=st.session_state.refined,
+            model=model,
+            preset_label=f"Multi-Agent ({selected_preset_label})",
+            sources=st.session_state.filtered,
+            summary={
+                "multi_agent_report": investigation_result.get("final_report", ""),
+                "agent_findings": investigation_result.get("workflow", []),
+            },
+        )
+        
+        append_session_history(
+            active_session_id,
+            {
+                "timestamp": datetime.now().isoformat(),
+                "query": query,
+                "refined_query": st.session_state.refined,
+                "model": model,
+                "preset": "multi-agent",
+                "mode": "multi-agent",
+                "source_count": len(st.session_state.filtered),
+            },
+        )
+        
+        status_slot.success(f"✔️ Multi-agent investigation completed! Saved as `{_fname}`")
+    
+    # =============================================================================
+    # STANDARD DUAL-OUTPUT MODE (Non-Multi-Agent)
+    # =============================================================================
+    else:
 
-    status_slot.success(f"✔️ Pipeline completed successfully! Investigation saved as `{_fname}`")
+    # Standard dual-output mode - indented under else
+        # Stage 2 - Refine query
+        with status_slot.container():
+            with st.spinner("🔄 Refining query..."):
+                try:
+                    st.session_state.refined = refine_query(llm, query)
+                except Exception as e:
+                    _render_pipeline_error("refine the query", e)
+
+        # Stage 3 - Search dark web
+        with status_slot.container():
+            search_label = "🔍 Searching dark web (deep mode)..." if deep_research_mode else "🔍 Searching dark web..."
+            with st.spinner(search_label):
+                if deep_research_mode:
+                    st.session_state.results = get_deep_search_results(
+                        st.session_state.refined,
+                        max_workers=threads,
+                        crawl_depth=research_depth,
+                        max_seed_links=max_results,
+                    )
+                else:
+                    st.session_state.results = cached_search_results(
+                        st.session_state.refined, threads
+                    )
+        # Cap results before LLM filter step
+        if len(st.session_state.results) > max_results:
+            st.session_state.results = st.session_state.results[:max_results]
+
+        # Stage 4 - Filter results
+        with status_slot.container():
+            with st.spinner("🗂️ Filtering results..."):
+                st.session_state.filtered = filter_results(
+                    llm, st.session_state.refined, st.session_state.results
+                )
+        # Cap filtered results before scraping
+        if len(st.session_state.filtered) > max_scrape:
+            st.session_state.filtered = st.session_state.filtered[:max_scrape]
+
+        # Stage 5 - Scrape content
+        with status_slot.container():
+            with st.spinner("📜 Scraping content..."):
+                st.session_state.scraped = cached_scrape_multiple(
+                    st.session_state.filtered, threads
+                )
+
+        # Stage 6 - Dual summarize in parallel (Filtered + Risky)
+        st.session_state.filtered_summary = ""
+        st.session_state.risky_summary = ""
+
+        with findings_placeholder.container():
+            st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
+            summary_status = st.info("Running Filtered and Risky analysis in parallel...")
+
+        with status_slot.container():
+            with st.spinner("✍️ Generating Filtered + Risky summaries..."):
+                try:
+                    llm_filtered = get_llm(model)
+                    llm_risky = get_llm(model)
+                    with ThreadPoolExecutor(max_workers=2) as executor:
+                        futures = {
+                            executor.submit(
+                                generate_mode_summary,
+                                llm_filtered,
+                                query,
+                                st.session_state.scraped,
+                                "filtered",
+                                selected_preset,
+                                custom_instructions,
+                            ): "filtered",
+                            executor.submit(
+                                generate_mode_summary,
+                                llm_risky,
+                                query,
+                                st.session_state.scraped,
+                                "risky",
+                                selected_preset,
+                                custom_instructions,
+                            ): "risky",
+                        }
+
+                        for future in as_completed(futures):
+                            mode = futures[future]
+                            result = future.result()
+                            if mode == "filtered":
+                                st.session_state.filtered_summary = result
+                            else:
+                                st.session_state.risky_summary = result
+                except Exception as e:
+                    _render_pipeline_error("generate dual summaries", e)
+
+        summary_status.success("Parallel analysis completed.")
+
+        dual_summary_payload = {
+            "filtered": st.session_state.filtered_summary,
+            "risky": st.session_state.risky_summary,
+        }
+
+        # Save investigation
+        _fname = save_investigation(
+            query=query,
+            refined_query=st.session_state.refined,
+            model=model,
+            preset_label=selected_preset_label,
+            sources=st.session_state.filtered,
+            summary=dual_summary_payload,
+        )
+
+        append_session_history(
+            active_session_id,
+            {
+                "timestamp": datetime.now().isoformat(),
+                "query": query,
+                "refined_query": st.session_state.refined,
+                "model": model,
+                "preset": selected_preset,
+                "deep_research": deep_research_mode,
+                "research_depth": research_depth,
+                "summary": dual_summary_payload,
+                "source_count": len(st.session_state.filtered),
+            },
+        )
+
+        # Render organized sections
+        with notes_placeholder.container():
+            with st.expander("📋 Notes", expanded=False):
+                st.markdown(f"**Refined Query:** `{st.session_state.refined}`")
+                st.markdown(f"**Model:** `{model}` &nbsp;&nbsp; **Domain:** {selected_preset_label}")
+                st.markdown(
+                    f"**Results found:** {len(st.session_state.results)} &nbsp;&nbsp; "
+                    f"**Filtered to:** {len(st.session_state.filtered)} &nbsp;&nbsp; "
+                    f"**Scraped:** {len(st.session_state.scraped)}"
+                )
+                st.markdown(
+                    f"**Search Mode:** {'Deep Research' if deep_research_mode else 'Standard'} &nbsp;&nbsp; "
+                    f"**Depth:** {research_depth}"
+                )
+
+        with sources_placeholder.container():
+            with st.expander(f"🔗 Sources ({len(st.session_state.filtered)} results)", expanded=False):
+                for i, item in enumerate(st.session_state.filtered, 1):
+                    title = item.get("title", "Untitled")
+                    link = item.get("link", "")
+                    st.markdown(f"{i}. [{title}]({link})")
+
+        with findings_placeholder.container():
+            st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
+            tab_filtered, tab_risky = st.tabs(["Filtered", "Risky"])
+            with tab_filtered:
+                st.markdown(st.session_state.filtered_summary)
+            with tab_risky:
+                st.markdown(st.session_state.risky_summary)
+            now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            fname = f"summary_{now}.md"
+            combined = (
+                "# Filtered\n\n"
+                + st.session_state.filtered_summary
+                + "\n\n# Risky\n\n"
+                + st.session_state.risky_summary
+            )
+            b64 = base64.b64encode(combined.encode()).decode()
+            href = f'<div class="aStyle">📥 <a href="data:file/markdown;base64,{b64}" download="{fname}">Download</a></div>'
+            st.markdown(href, unsafe_allow_html=True)
+
+        status_slot.success(f"✔️ Pipeline completed successfully! Investigation saved as `{_fname}`")
