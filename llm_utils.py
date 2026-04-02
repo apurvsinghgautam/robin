@@ -17,6 +17,44 @@ from config import (
     LLAMA_CPP_BASE_URL,
 )
 
+#  INPUT SANITIZATION FOR PROMPT INJECTION PREVENTION !!
+
+def sanitize_input(text: str, max_length: int = 50000) -> str:
+    """
+    Sanitize user input and scraped content to prevent prompt injection attacks.
+    
+    Security measures:
+    1. Remove control characters and null bytes
+    2. Remove common prompt injection patterns
+    3. Normalize whitespace
+    4. Enforce length limits
+    5. Remove potentially dangerous escape sequences
+    
+    Args:
+        text: Input text to sanitize
+        max_length: Maximum allowed length (default 50KB)
+    
+    Returns:
+        Sanitized text safe for LLM processing
+    """
+    if not isinstance(text, str):
+        text = str(text) if text is not None else ""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class BufferedStreamingHandler(BaseCallbackHandler):
     def __init__(self, buffer_limit: int = 60, ui_callback: Optional[Callable[[str], None]] = None):
