@@ -77,6 +77,35 @@ def sanitize_input(text: str, max_length: int = 50000) -> str:
     return text
 
 
+def sanitize_for_safe_output(text: str, max_length: int = 50000) -> str:
+    """
+    Build a safer version of scraped data by redacting high-risk material.
+    This is used for the "filtered" report mode.
+    """
+    text = sanitize_input(text, max_length=max_length)
+
+    redactions = [
+        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[REDACTED_EMAIL]"),
+        (r"\b(?:\+?\d[\d\-\s\(\)]{7,}\d)\b", "[REDACTED_PHONE]"),
+        (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[REDACTED_IP]"),
+        (r"\b(?:bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}\b", "[REDACTED_BTC]"),
+        (r"\b0x[a-fA-F0-9]{40}\b", "[REDACTED_ETH]"),
+        (r"\b[a-z2-7]{16,56}\.onion\b", "[REDACTED_ONION]"),
+    ]
+
+    for pattern, replacement in redactions:
+        text = re.sub(pattern, replacement, text)
+
+    unsafe_terms = [
+        "exploit kit", "zero-day", "payload builder", "stealer", "botnet", "credential stuffing",
+        "carding", "ransomware as a service", "dropper", "shellcode", "malware loader",
+    ]
+    for term in unsafe_terms:
+        text = re.sub(rf"(?i)\b{re.escape(term)}\b", "[REDACTED_HIGH_RISK_TERM]", text)
+
+    return text
+
+
 class BufferedStreamingHandler(BaseCallbackHandler):
     def __init__(self, buffer_limit: int = 60, ui_callback: Optional[Callable[[str], None]] = None):
         self.buffer = ""
