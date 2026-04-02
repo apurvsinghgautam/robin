@@ -175,3 +175,10 @@ cython_debug/
 
 # Vscode
 .vscode
+
+# Streamlit local secrets/config
+.streamlit/secrets.toml
+
+# Local editor/session artifacts
+*.swp
+*.swo
