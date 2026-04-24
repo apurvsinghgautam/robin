@@ -79,7 +79,9 @@ def refine_query(llm, user_input):
     2. Refine the user query by adding or removing words so that it returns the best result from dark web search engines
     3. Don't use any logical operators (AND, OR, etc.)
     4. Keep the final refined query limited to 5 words or less
-    5. Output just the user query and nothing else
+    5. PRESERVE named entities exactly: org names, countries, actor handles, CVE IDs
+    6. Drop generic terms before dropping named entities
+    7. Output just the user query and nothing else
 
     INPUT:
     """
@@ -120,29 +122,24 @@ def filter_results(llm, query, results):
         result_indices = chain.invoke({"query": query, "results": final_str})
 
     # Select top_k results using original (non-truncated) results
-    parsed_indices = []
-    for match in re.findall(r"\d+", result_indices):
-        try:
-            idx = int(match)
-            if 1 <= idx <= len(results):
-                parsed_indices.append(idx)
-        except ValueError:
-            continue
+    parsed_indices = [int(m) for m in re.findall(r"\d+", result_indices)
+                      if 1 <= int(m) <= len(results)]
+
+    # retry once with truncated input if first parse fails
+    if not parsed_indices:
+        final_str = _generate_final_string(results, truncate=True)
+        result_indices = chain.invoke({"query": query, "results": final_str})
+        parsed_indices = [int(m) for m in re.findall(r"\d+", result_indices)
+                          if 1 <= int(m) <= len(results)]
+        if not parsed_indices:
+            logging.error("[ROBIN] Retry failed. No valid indices. Returning empty.")
+            return []
 
     # Remove duplicates while preserving order
     seen = set()
     parsed_indices = [
         i for i in parsed_indices if not (i in seen or seen.add(i))
     ]
-
-    if not parsed_indices:
-        logging.warning(
-            "Unable to interpret LLM result selection ('%s'). "
-            "Defaulting to the top %s results.",
-            result_indices,
-            min(len(results), 20),
-        )
-        parsed_indices = list(range(1, min(len(results), 20) + 1))
 
     top_results = [results[i - 1] for i in parsed_indices[:20]]
 
@@ -182,7 +179,8 @@ def _generate_final_string(results, truncate=False):
                 else truncated_link
             )
 
-        final_str.append(f"{i+1}. {truncated_link} - {title}")
+        snippet = re.sub(r"[^0-9a-zA-Z\s\-\.]", " ", res.get("snippet", ""))[:120]
+        final_str.append(f"{i+1}. {truncated_link} | {title} | {snippet}")
 
     return "\n".join(s for s in final_str)
 
@@ -192,6 +190,7 @@ PRESET_PROMPTS = {
     You are an Cybercrime Threat Intelligence Expert tasked with generating context-based technical investigative insights from dark web osint search engine results.
 
     Rules:
+    0. STRICT GROUNDING: Only report artifacts, IOCs, and claims explicitly present verbatim in the INPUT data. DO NOT infer, extrapolate, or hallucinate data not in INPUT. If evidence is absent — omit, do not speculate.
     1. Analyze the Darkweb OSINT data provided using links and their raw text.
     2. Output the Source Links referenced for the analysis.
     3. Provide a detailed, contextual, evidence-based technical analysis of the data.
@@ -218,6 +217,7 @@ PRESET_PROMPTS = {
     You are a Malware and Ransomware Intelligence Expert tasked with analyzing dark web data for malware-related threats.
 
     Rules:
+    0. STRICT GROUNDING: Only report artifacts, IOCs, and claims explicitly present verbatim in the INPUT data. DO NOT infer, extrapolate, or hallucinate data not in INPUT. If evidence is absent — omit, do not speculate.
     1. Analyze the Darkweb OSINT data provided using links and their raw text.
     2. Output the Source Links referenced for the analysis.
     3. Focus specifically on ransomware groups, malware families, exploit kits, and attack infrastructure.
@@ -244,6 +244,7 @@ PRESET_PROMPTS = {
     You are a Personal Threat Intelligence Expert tasked with analyzing dark web data for identity and personal information exposure.
 
     Rules:
+    0. STRICT GROUNDING: Only report artifacts, IOCs, and claims explicitly present verbatim in the INPUT data. DO NOT infer, extrapolate, or hallucinate data not in INPUT. If evidence is absent — omit, do not speculate.
     1. Analyze the Darkweb OSINT data provided using links and their raw text.
     2. Output the Source Links referenced for the analysis.
     3. Focus on personally identifiable information (PII): names, emails, phone numbers, addresses, SSNs, passport data, financial account details.
@@ -270,6 +271,7 @@ PRESET_PROMPTS = {
     You are a Corporate Intelligence Expert tasked with analyzing dark web data for corporate data leaks and espionage activity.
 
     Rules:
+    0. STRICT GROUNDING: Only report artifacts, IOCs, and claims explicitly present verbatim in the INPUT data. DO NOT infer, extrapolate, or hallucinate data not in INPUT. If evidence is absent — omit, do not speculate.
     1. Analyze the Darkweb OSINT data provided using links and their raw text.
     2. Output the Source Links referenced for the analysis.
     3. Focus on leaked corporate data: credentials, source code, internal documents, financial records, employee data, customer databases.

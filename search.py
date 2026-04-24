@@ -82,7 +82,13 @@ def fetch_search_results(endpoint, query):
                     if len(link) != 0:
                         # Basic filtering to avoid self-referential links
                         if "search" not in link[0] and len(title) > 3:
-                            links.append({"title": title, "link": link[0]})
+                            # Try to find a snippet
+                            snippet = ""
+                            parent = a.find_parent(['li', 'div', 'p'])
+                            if parent:
+                                snippet = parent.get_text(strip=True, separator=" ")
+                                snippet = snippet.replace(title, "").strip()
+                            links.append({"title": title, "link": link[0], "snippet": snippet})
                 except:
                     continue
             return links
