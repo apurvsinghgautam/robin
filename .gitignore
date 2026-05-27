@@ -129,6 +129,7 @@ celerybeat.pid
 
 # Environments
 .env
+investigations/
 .venv
 env/
 venv/

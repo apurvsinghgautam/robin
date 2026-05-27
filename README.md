@@ -74,6 +74,21 @@ docker run --rm \
 
 - Open your browser and navigate to `http://localhost:8501`
 
+
+### Using Compose [Same as Docker]
+
+Run docker infrastructure with a single command
+
+```bash
+docker compose up --build -d
+```
+
+When you finished
+
+```bash
+docker compose down
+```
+
 ### Using Python (Development Version)
 
 - With `Python 3.10+` and Tor installed, run the following:

@@ -1,0 +1,18 @@
+services:
+    robin:
+        platform: "${TARGET_PLATFORM:-linux/amd64}"
+        build:
+            context: .
+            dockerfile: Dockerfile
+        ports:
+          - "${ROBIN_PORT:-8501}:8501"
+        environment:
+          - HOST_UID=${HOST_UID:-1000}
+          - HOST_GID=${HOST_GID:-1000}
+        env_file:
+          - .env
+        volumes:
+          - .env:/app/.env
+          - ./investigations:/app/investigations
+        extra_hosts:
+            - "host.docker.internal:host-gateway"

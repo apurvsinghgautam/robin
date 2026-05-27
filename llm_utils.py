@@ -57,23 +57,23 @@ _common_llm_params = {
 _llm_config_map = {
     'gpt-4.1': {
         'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-4.1'} 
+        'constructor_params': {'model_name': 'gpt-4.1'}
     },
     'gpt-5.2': {
         'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-5.2'} 
+        'constructor_params': {'model_name': 'gpt-5.2'}
     },
     'gpt-5.1': {
         'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-5.1'} 
+        'constructor_params': {'model_name': 'gpt-5.1'}
     },
     'gpt-5-mini': {
         'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-5-mini'} 
+        'constructor_params': {'model_name': 'gpt-5-mini'}
     },
-    'gpt-5-nano': { 
+    'gpt-5-nano': {
         'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-5-nano'} 
+        'constructor_params': {'model_name': 'gpt-5-nano'}
     },
     'claude-sonnet-4-5': {
         'class': ChatAnthropic,
@@ -167,7 +167,7 @@ _llm_config_map = {
     #     'class': ChatOllama,
     #     'constructor_params': {'model': 'deepseek-r1:latest', 'base_url': OLLAMA_BASE_URL}
     # },
-    
+
     # Add more models here easily:
     # 'mistral7b': {
     #     'class': ChatOllama,
@@ -361,7 +361,7 @@ def resolve_model_config(model_choice: str):
 
     # Custom OpenAI-compatible API — manual model name or auto-discovered
     custom_candidates = list(fetch_custom_api_models())
-    if config.CUSTOM_API_MODEL and config.CUSTOM_API_MODEL.strip():
+    if config and config.CUSTOM_API_MODEL and config.CUSTOM_API_MODEL.strip():
         manual = config.CUSTOM_API_MODEL.strip()
         if _normalize_model_name(manual) not in {_normalize_model_name(m) for m in custom_candidates}:
             custom_candidates.append(manual)

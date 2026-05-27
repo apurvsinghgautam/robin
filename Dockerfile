@@ -1,12 +1,14 @@
+ARG TARGETPLATFORM
 FROM python:3.10-slim AS builder
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && \
-    apt-get install -y --no-install-recommends \
+      apt-get install -y --no-install-recommends \
       tor \
       build-essential \
       curl \
       libssl-dev \
-      libffi-dev && \
+      libffi-dev \
+      gosu && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -18,7 +20,7 @@ RUN pip install --upgrade pip && \
 
 COPY . .
 
-RUN chmod +x /app/entrypoint.sh
+RUN chmod -R 777 /app
 
 EXPOSE 8501
 
