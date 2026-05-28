@@ -1,6 +1,5 @@
 services:
     robin:
-        platform: "${TARGET_PLATFORM:-linux/amd64}"
         build:
             context: .
             dockerfile: Dockerfile

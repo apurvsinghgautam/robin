@@ -1,4 +1,3 @@
-ARG TARGETPLATFORM
 FROM python:3.10-slim AS builder
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && \
