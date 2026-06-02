@@ -339,9 +339,9 @@ def resolve_model_config(model_choice: str):
     Supports both the predefined remote models and any locally installed Ollama models.
     """
     model_choice_lower = _normalize_model_name(model_choice)
-    config = _llm_config_map.get(model_choice_lower)
-    if config:
-        return config
+    cfg = _llm_config_map.get(model_choice_lower)
+    if cfg:
+        return cfg
 
     # llama.cpp (OpenAI-compatible)
     for llama_model in fetch_llama_cpp_models():
