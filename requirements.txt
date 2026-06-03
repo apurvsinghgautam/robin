@@ -9,3 +9,10 @@ backports.tarfile
 langchain-anthropic
 langchain_community
 langchain_google_genai
+Flask
+Flask-SQLAlchemy
+Flask-Login
+Flask-WTF
+WTForms
+email-validator
+Werkzeug
