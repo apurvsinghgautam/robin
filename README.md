@@ -74,6 +74,26 @@ docker run --rm \
 
 - Open your browser and navigate to `http://localhost:8501`
 
+### Automatic Server Deploy
+
+Pushes to `main` now build the Docker image and deploy the latest image to your server over SSH.
+
+Set these GitHub repository secrets before enabling the workflow:
+
+- `SERVER_HOST`
+- `SERVER_USERNAME`
+- `SERVER_SSH_KEY`
+- `SERVER_PORT` (optional, defaults to `22` if your server uses a custom port)
+
+On the server, make sure Docker is installed and create the app data folder once:
+
+```bash
+sudo mkdir -p /opt/robin/investigations
+sudo touch /opt/robin/.env
+```
+
+The workflow runs the container as `robin` on port `8501` and mounts `/opt/robin/.env` plus `/opt/robin/investigations` so environment settings and saved investigations survive redeploys.
+
 ### Using Python (Development Version)
 
 - With `Python 3.10+` and Tor installed, run the following:
