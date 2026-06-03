@@ -33,3 +33,30 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: apurvsg/robin:latest
+
+  deploy:
+    needs: docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+            mkdir -p /opt/robin/investigations
+            docker pull apurvsg/robin:latest
+            docker stop robin || true
+            docker rm robin || true
+            docker run -d \
+              --name robin \
+              --restart unless-stopped \
+              -p 8501:8501 \
+              -v /opt/robin/.env:/app/.env \
+              -v /opt/robin/investigations:/app/investigations \
+              --add-host=host.docker.internal:host-gateway \
+              apurvsg/robin:latest
