@@ -26,7 +26,7 @@ USER_AGENTS = [
 
 MAX_DOWNLOAD_BYTES = 1_000_000
 MAX_EXTRACTED_TEXT_CHARS = 50_000
-MAX_RETURN_CHARS = 2_000
+MAX_RETURN_CHARS = 15_000
 ALLOWED_CONTENT_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
 _thread_local = threading.local()
 _logger = logging.getLogger(__name__)
@@ -125,9 +125,10 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
             html = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
 
             soup = BeautifulSoup(html, "html.parser")
-            # Clean up text: remove scripts/styles
-            for script in soup(["script", "style"]):
-                script.extract()
+            # Clean up text: remove scripts/styles and structural/UI boilerplate
+            # (nav, header, footer, aside, form contain menus/banners, not content)
+            for tag in soup(["script", "style", "nav", "header", "footer", "aside", "form"]):
+                tag.extract()
             text = soup.get_text(separator=' ')
             # Normalize whitespace
             text = ' '.join(text.split())

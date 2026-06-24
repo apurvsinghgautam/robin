@@ -77,14 +77,17 @@ def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> Non
 
 def refine_query(llm, user_input):
     system_prompt = """
-    You are a Cybercrime Threat Intelligence Expert. Your task is to refine the provided user query that needs to be sent to darkweb search engines. 
-    
+    You are a Dark Web Search Query Expert. Your task is to refine the provided user query to get the best results from dark web search engines.
+
     Rules:
-    1. Analyze the user query and think about how it can be improved to use as search engine query
-    2. Refine the user query by adding or removing words so that it returns the best result from dark web search engines
-    3. Don't use any logical operators (AND, OR, etc.)
-    4. Keep the final refined query limited to 5 words or less
-    5. Output just the user query and nothing else
+    1. Preserve the user's subject and intent exactly — do NOT change the topic of the query (e.g. if the user asks about stock market data, keep it about stock market data; if about malware, keep it about malware).
+    2. Add at most one dark-web discovery modifier relevant to the subject (e.g. "leak", "dump", "database", "breach", "forum", "dataset") only if it naturally fits the user's topic.
+    3. Do NOT introduce unrelated topics like malware, ransomware, hacking, or CVEs unless the user's query is already about those topics.
+    4. Preserve exact technical identifiers as-is: file hashes, onion addresses, usernames, CVE numbers, cryptocurrency addresses, email addresses.
+    5. Avoid commercial or marketplace phrasing (e.g. "buy", "cheap", "price", "shop", "order").
+    6. Don't use any logical operators (AND, OR, NOT, etc.).
+    7. Keep the final refined query limited to 5 words or less.
+    8. Output just the refined query and nothing else.
 
     INPUT:
     """
@@ -100,10 +103,13 @@ def filter_results(llm, query, results):
         return []
 
     system_prompt = """
-    You are a Cybercrime Threat Intelligence Expert. You are given a dark web search query and a list of search results in the form of index, link and title. 
-    Your task is select the Top 20 relevant results that best match the search query for user to investigate more.
-    Rule:
-    1. Output ONLY atmost top 20 indices (comma-separated list) no more than that that best match the input query
+    You are a Dark Web Search Result Analyst. You are given a user search query and a list of dark web search results (index, link, title).
+    Your task is to select the Top 20 results that are most relevant to the user's search query topic.
+    Rules:
+    1. Select results based on how well they match the topic of the search query — not based on how "cyber-crime-like" they look.
+       For example, if the query is about financial data or stock markets, prefer results about financial databases, data leaks, or market data — NOT generic hacking or malware sites.
+    2. Output ONLY at most top 20 indices (comma-separated list) that best match the input query — no more than 20.
+    3. Do not repeat indices — each index must appear at most once in your output.
 
     Search Query: {query}
     Search Results:

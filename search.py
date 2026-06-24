@@ -1,5 +1,6 @@
 import requests
 import random, re
+from urllib.parse import urlunparse, unquote
 import json
 import os
 from bs4 import BeautifulSoup
@@ -73,16 +74,62 @@ def fetch_search_results(endpoint, query):
             soup = BeautifulSoup(response.text, "html.parser")
             links = []
             # Generic parsing for standard search engine layouts
+            from urllib.parse import urlparse, parse_qs
+            endpoint_parsed = urlparse(url)
+            endpoint_host = (endpoint_parsed.hostname or "").lower()
+
             for a in soup.find_all('a'):
                 try:
                     href = a['href']
                     title = a.get_text(strip=True)
                     # Extract onion links
-                    link = re.findall(r'https?:\/\/[a-z0-9\.]+\.onion.*', href)
+                    link = re.findall(r'https?:\/\/[a-z0-9\.-]+\.onion[^\s"\'<>]*', href)
                     if len(link) != 0:
-                        # Basic filtering to avoid self-referential links
-                        if "search" not in link[0] and len(title) > 3:
-                            links.append({"title": title, "link": link[0]})
+                        matched_url = link[0]
+                        matched_parsed = urlparse(matched_url)
+                        matched_host = (matched_parsed.hostname or "").lower()
+
+                        # If the link is a redirect link pointing to the search engine itself,
+                        # attempt to extract the target onion link from the query parameters.
+                        if matched_host == endpoint_host:
+                            qs = parse_qs(matched_parsed.query)
+                            found_nested = False
+                            for vals in qs.values():
+                                for val in vals:
+                                    if ".onion" in val:
+                                        nested_links = re.findall(r'https?:\/\/[a-z0-9\.-]+\.onion[^\s"\'<>]*', val)
+                                        if nested_links:
+                                            matched_url = nested_links[0]
+                                            matched_parsed = urlparse(matched_url)
+                                            matched_host = (matched_parsed.hostname or "").lower()
+                                            found_nested = True
+                                            break
+                                if found_nested:
+                                    break
+
+                        matched_path = matched_parsed.path.rstrip('/')
+                        is_self_ref = matched_host == endpoint_host
+                        is_utility = matched_path in (
+                            "/about", "/contact", "/directory", "/last-added", 
+                            "/advertising", "/advertise", "/webmaster", "/search",
+                            ""
+                        )
+
+                        # Filter out self-referential utility pages
+                        if is_self_ref and is_utility:
+                            continue
+
+                        # Only drop URLs whose path is exactly /search or /search/
+                        # (not URLs that merely contain the word "search" anywhere)
+                        is_search_page = matched_parsed.path.rstrip('/') == '/search'
+
+                        # Title quality check: must be 4+ chars and contain at least one alphanumeric,
+                        # and must not be excessively long (scraped paragraph noise)
+                        has_alphanum = bool(re.search(r'[a-zA-Z0-9]', title))
+                        title_ok = len(title) >= 4 and has_alphanum and len(title) <= 200
+
+                        if not is_search_page and title_ok:
+                            links.append({"title": title, "link": matched_url})
                 except:
                     continue
             return links
@@ -100,13 +147,22 @@ def get_search_results(refined_query, max_workers=5):
             result_urls = future.result()
             results.extend(result_urls)
 
-    # Deduplicate results
+    # Deduplicate results — normalize to scheme+host+path only (strip query params,
+    # fragments, and URL-encoding) so that tracker-tagged variants of the same page
+    # are treated as one result.
+    from urllib.parse import urlparse as _urlparse
     seen_links = set()
     unique_results = []
     for res in results:
-        link = res.get("link")
-        # Remove trailing slashes for better deduplication
-        clean_link = link.rstrip('/')
+        link = res.get("link") or ""
+        try:
+            _p = _urlparse(link)
+            # Decode percent-encoding and lowercase the host for consistent comparison
+            norm_host = unquote(_p.hostname or "").lower()
+            norm_path = unquote(_p.path.rstrip('/'))
+            clean_link = f"{_p.scheme}://{norm_host}{norm_path}"
+        except Exception:
+            clean_link = link.rstrip('/')
         if clean_link not in seen_links:
             seen_links.add(clean_link)
             unique_results.append(res)

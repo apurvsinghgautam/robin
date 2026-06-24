@@ -55,6 +55,14 @@ _common_llm_params = {
 # Map input model choices (lowercased) to their configuration
 # Each config includes the class and any model-specific constructor parameters
 _llm_config_map = {
+    'gpt-4o': {
+        'class': ChatOpenAI,
+        'constructor_params': {'model_name': 'gpt-4o'} 
+    },
+    'gpt-4o-mini': {
+        'class': ChatOpenAI,
+        'constructor_params': {'model_name': 'gpt-4o-mini'} 
+    },
     'gpt-4.1': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-4.1'} 
@@ -143,10 +151,10 @@ _llm_config_map = {
             'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
         }
     },
-    'grok-4.1-fast-openrouter': {
+    'grok-4.3-openrouter': {
         'class': ChatOpenAI,
         'constructor_params': {
-            'model_name': 'x-ai/grok-4.1-fast',
+            'model_name': 'x-ai/grok-4.3',
             'base_url': OPENROUTER_BASE_URL,
             'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
         }

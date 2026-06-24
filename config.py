@@ -1,7 +1,13 @@
 import os
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
-load_dotenv()
+# Locate and load the nearest .env file from the current working directory or parent directories.
+# This makes loading environment variables more reliable when the app is started from a subdirectory.
+dotenv_path = find_dotenv()
+if dotenv_path:
+    load_dotenv(dotenv_path)
+else:
+    load_dotenv()
 
 
 def _clean_env(name, default=None):

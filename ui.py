@@ -381,7 +381,7 @@ findings_placeholder = st.empty()
 if run_button and query:
     # Clear any loaded investigation and old pipeline state
     st.session_state.pop("loaded_investigation", None)
-    for k in ["refined", "results", "filtered", "scraped", "streamed_summary"]:
+    for k in ["refined", "results", "filtered", "scraped", "streamed_summary", "last_saved_filename"]:
         st.session_state.pop(k, None)
 
     # Stage 1 - Load LLM
@@ -399,24 +399,20 @@ if run_button and query:
                 st.session_state.refined = refine_query(llm, query)
             except Exception as e:
                 _render_pipeline_error("refine the query", e)
-    p1.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Refined Query</p><p>{st.session_state.refined}</p></div>",
-        unsafe_allow_html=True,
-    )
 
     # Stage 3 - Search dark web
     with status_slot.container():
         with st.spinner("🔍 Searching dark web..."):
-            st.session_state.results = cached_search_results(
+            results = cached_search_results(
                 st.session_state.refined, threads
             )
+            if not results:
+                status_slot.warning("⚠️ No search results found on the dark web.")
+                st.stop()
+            st.session_state.results = results
     # Cap results before LLM filter step
     if len(st.session_state.results) > max_results:
         st.session_state.results = st.session_state.results[:max_results]
-    p2.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Search Results</p><p>{len(st.session_state.results)}</p></div>",
-        unsafe_allow_html=True,
-    )
 
     # Stage 4 - Filter results
     with status_slot.container():
@@ -427,10 +423,6 @@ if run_button and query:
     # Cap filtered results before scraping
     if len(st.session_state.filtered) > max_scrape:
         st.session_state.filtered = st.session_state.filtered[:max_scrape]
-    p3.container(border=True).markdown(
-        f"<div class='colHeight'><p class='pTitle'>Filtered Results</p><p>{len(st.session_state.filtered)}</p></div>",
-        unsafe_allow_html=True,
-    )
 
     # Stage 5 - Scrape content
     with status_slot.container():
@@ -454,10 +446,13 @@ if run_button and query:
         with st.spinner("✍️ Generating summary..."):
             stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
             llm.callbacks = [stream_handler]
-            _ = generate_summary(
+            summary_text = generate_summary(
                 llm, query, st.session_state.scraped,
                 preset=selected_preset, custom_instructions=custom_instructions,
             )
+            if not st.session_state.streamed_summary:
+                st.session_state.streamed_summary = summary_text
+                summary_slot.markdown(st.session_state.streamed_summary)
 
     # Save investigation
     _fname = save_investigation(
@@ -468,8 +463,23 @@ if run_button and query:
         sources=st.session_state.filtered,
         summary=st.session_state.streamed_summary,
     )
+    st.session_state.last_saved_filename = _fname
 
-    # Render organized sections
+# Render organized sections if results exist in session state
+if "refined" in st.session_state:
+    p1.container(border=True).markdown(
+        f"<div class='colHeight'><p class='pTitle'>Refined Query</p><p>{st.session_state.refined}</p></div>",
+        unsafe_allow_html=True,
+    )
+    p2.container(border=True).markdown(
+        f"<div class='colHeight'><p class='pTitle'>Search Results</p><p>{len(st.session_state.results)}</p></div>",
+        unsafe_allow_html=True,
+    )
+    p3.container(border=True).markdown(
+        f"<div class='colHeight'><p class='pTitle'>Filtered Results</p><p>{len(st.session_state.filtered)}</p></div>",
+        unsafe_allow_html=True,
+    )
+
     with notes_placeholder.container():
         with st.expander("📋 Notes", expanded=False):
             st.markdown(f"**Refined Query:** `{st.session_state.refined}`")
@@ -496,4 +506,5 @@ if run_button and query:
         href = f'<div class="aStyle">📥 <a href="data:file/markdown;base64,{b64}" download="{fname}">Download</a></div>'
         st.markdown(href, unsafe_allow_html=True)
 
-    status_slot.success(f"✔️ Pipeline completed successfully! Investigation saved as `{_fname}`")
+    if "last_saved_filename" in st.session_state:
+        status_slot.success(f"✔️ Pipeline completed successfully! Investigation saved as `{st.session_state.last_saved_filename}`")
