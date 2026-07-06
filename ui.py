@@ -454,10 +454,20 @@ if run_button and query:
         with st.spinner("✍️ Generating summary..."):
             stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
             llm.callbacks = [stream_handler]
-            _ = generate_summary(
+            summary_text = generate_summary(
                 llm, query, st.session_state.scraped,
                 preset=selected_preset, custom_instructions=custom_instructions,
             )
+
+    # Reasoning models (e.g. OpenAI o1, DeepSeek R1) stream their chain-of-thought
+    # as reasoning_content, so on_llm_new_token never fires with answer tokens and
+    # the streamed buffer stays empty. generate_summary() still returns the full
+    # text via invoke, so fall back to it whenever nothing was streamed. Without
+    # this, the Findings panel, the saved investigation and the download are all
+    # blank for reasoning models even though the report was generated correctly.
+    if not st.session_state.streamed_summary.strip() and summary_text:
+        st.session_state.streamed_summary = summary_text
+        summary_slot.markdown(summary_text)
 
     # Save investigation
     _fname = save_investigation(
