@@ -19,4 +19,4 @@ fi
 
 echo "Tor is ready."
 echo "Starting Robin: AI-Powered Dark Web OSINT Tool..."
-exec streamlit run ui.py --server.port=8501 --server.address=0.0.0.0
+exec uvicorn main:app --host 0.0.0.0 --port $PORT

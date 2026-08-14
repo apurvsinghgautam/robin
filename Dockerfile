@@ -20,6 +20,7 @@ COPY . .
 
 RUN chmod +x /app/entrypoint.sh
 
-EXPOSE 8501
+ENV PORT=8000
+EXPOSE 8000
 
 ENTRYPOINT ["/app/entrypoint.sh"]
