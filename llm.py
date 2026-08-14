@@ -348,6 +348,13 @@ PRESET_PROMPTS = {
 
 def generate_summary(llm, query, content, preset="threat_intel", custom_instructions=""):
     system_prompt = PRESET_PROMPTS.get(preset, PRESET_PROMPTS["threat_intel"])
+    
+    if not isinstance(content, str):
+        try:
+            content = json.dumps(content, indent=2)
+        except Exception:
+            pass
+            
     invoke_vars = {"query": query, "content": content}
     if custom_instructions and custom_instructions.strip():
         # Append as a template placeholder filled by an invoke value, so literal
@@ -387,7 +394,7 @@ INVESTIGATION CONTEXT:
 """
 
 
-def build_followup_context(query, refined, sources, scraped, summary, char_budget=12000):
+def build_followup_context(query, refined, sources, scraped, summary, enrichment_data=None, char_budget=12000):
     """Assemble the grounding context a follow-up is answered from:
     original + refined query, sources, the generated summary, and a
     char-budgeted slice of the raw scraped content (may be absent for
@@ -400,8 +407,20 @@ def build_followup_context(query, refined, sources, scraped, summary, char_budge
         parts.append("SOURCES:\n" + src_lines)
     if summary:
         parts.append("INVESTIGATION SUMMARY:\n" + str(summary))
+    if enrichment_data:
+        try:
+            enrich_str = json.dumps(enrichment_data, indent=2)
+            parts.append("OSINT ENRICHMENT DATA:\n" + enrich_str)
+        except Exception:
+            parts.append("OSINT ENRICHMENT DATA:\n" + str(enrichment_data))
     if scraped:
-        raw = scraped if isinstance(scraped, str) else "\n\n".join(str(x) for x in scraped)
+        if isinstance(scraped, str):
+            raw = scraped
+        else:
+            try:
+                raw = json.dumps(scraped, indent=2)
+            except Exception:
+                raw = str(scraped)
         if len(raw) > char_budget:
             raw = raw[:char_budget] + "\n\n[...truncated...]"
         parts.append("RAW SCRAPED CONTENT (may be truncated):\n" + raw)
@@ -453,7 +472,14 @@ def suggest_pivots(llm, query, content, preset="threat_intel", max_pivots=5):
     INVESTIGATION DATA:
     """.replace("{max_pivots}", str(max_pivots))
 
-    raw_content = content if isinstance(content, str) else "\n\n".join(str(x) for x in (content or []))
+    if isinstance(content, str):
+        raw_content = content
+    else:
+        try:
+            raw_content = json.dumps(content, indent=2)
+        except Exception:
+            raw_content = str(content)
+
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{content}")]
     )

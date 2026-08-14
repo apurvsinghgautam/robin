@@ -52,9 +52,28 @@ _common_llm_params = {
     "callbacks": _common_callbacks,
 }
 
-# Map input model choices (lowercased) to their configuration
-# Each config includes the class and any model-specific constructor parameters
+from langchain_core.language_models.chat_models import SimpleChatModel
+from langchain_core.messages import BaseMessage
+from typing import Any, Optional
+
+class MockLLM(SimpleChatModel):
+    def _call(self, messages: list[BaseMessage], stop: Optional[list[str]] = None, run_manager: Optional[Any] = None, **kwargs: Any) -> str:
+        text = str(messages).lower()
+        if "pivots" in text:
+            return '["mock pivot 1", "mock pivot 2"]'
+        if "top 20" in text:
+            return '1, 2'
+        return "Mock response for E2E testing."
+    
+    @property
+    def _llm_type(self) -> str:
+        return "mock"
+
 _llm_config_map = {
+    'mock': {
+        'class': MockLLM,
+        'constructor_params': {}
+    },
     'gpt-4.1': {
         'class': ChatOpenAI,
         'constructor_params': {'model_name': 'gpt-4.1'} 

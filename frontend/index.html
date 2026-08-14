@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robin - OSINT Investigator</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Robin <span>OSINT</span></h1>
+            <p>AI-Powered Dark Web Intelligence</p>
+        </header>
+
+        <!-- Configuration & Input Section -->
+        <section id="input-section" class="card">
+            <form id="investigation-form">
+                <div class="form-group">
+                    <label for="query">Target or Query</label>
+                    <input type="text" id="query" placeholder="e.g. evil.com or 8.8.8.8" required>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="model">Model</label>
+                        <select id="model">
+                            <option value="mock">Mock (Testing)</option>
+                            <option value="gpt4o">GPT-4o (OpenAI)</option>
+                            <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet (Anthropic)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" id="submit-btn" class="primary-btn">Start Investigation</button>
+            </form>
+        </section>
+
+        <!-- Progress Section (Hidden by default) -->
+        <section id="progress-section" class="card hidden">
+            <h3>Investigation Status</h3>
+            <div class="status-indicator">
+                <div class="spinner"></div>
+                <span id="status-text">Starting...</span>
+            </div>
+            <div id="error-container" class="error-msg hidden"></div>
+        </section>
+
+        <!-- Results Section (Hidden by default) -->
+        <section id="results-section" class="hidden">
+            <!-- Summary -->
+            <div class="card result-card">
+                <h3>Executive Summary</h3>
+                <div id="summary-content" class="markdown-body"></div>
+            </div>
+
+            <!-- Structured Data Accordions -->
+            <div class="accordion-container">
+                <!-- Search Results -->
+                <details class="accordion">
+                    <summary>Search Results <span id="search-count" class="badge">0</span></summary>
+                    <div id="search-results-content" class="accordion-content"></div>
+                </details>
+
+                <!-- Scraped Data -->
+                <details class="accordion">
+                    <summary>Scraped Content <span id="scrape-count" class="badge">0</span></summary>
+                    <div id="scraped-content-list" class="accordion-content"></div>
+                </details>
+
+                <!-- Enrichment Data -->
+                <details class="accordion">
+                    <summary>OSINT Enrichment <span id="enrichment-count" class="badge">0</span></summary>
+                    <div id="enrichment-data-content" class="accordion-content"></div>
+                </details>
+            </div>
+
+            <!-- Pivots -->
+            <div class="card result-card" id="pivots-card">
+                <h3>Suggested Pivots</h3>
+                <div id="pivots-content" class="pivot-list"></div>
+            </div>
+
+            <!-- Chat -->
+            <div class="card chat-card">
+                <h3>Follow-up Chat</h3>
+                <div id="chat-history" class="chat-messages"></div>
+                <form id="chat-form" class="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Ask a question about this investigation..." required>
+                    <button type="submit" id="chat-btn">Send</button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <!-- Scripts -->
+    <script src="api.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
