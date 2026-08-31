@@ -83,6 +83,30 @@ _llm_config_map = {
         'class': ChatAnthropic,
         'constructor_params': {'model': 'claude-sonnet-4-0'}
     },
+    'gemini-3.7-flash': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-3.7-flash', 'google_api_key': GOOGLE_API_KEY}
+    },
+    'gemini-3.6-flash': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-3.6-flash', 'google_api_key': GOOGLE_API_KEY}
+    },
+    'gemini-3.5-flash': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-3.5-flash', 'google_api_key': GOOGLE_API_KEY}
+    },
+    'gemini-3.5-flash-lite': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-3.5-flash-lite', 'google_api_key': GOOGLE_API_KEY}
+    },
+    'gemini-3.1-flash-lite': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-3.1-flash-lite', 'google_api_key': GOOGLE_API_KEY}
+    },
+    'gemini-3.1-pro-preview': {
+        'class': ChatGoogleGenerativeAI,
+        'constructor_params': {'model': 'gemini-3.1-pro-preview', 'google_api_key': GOOGLE_API_KEY}
+    },
     'gemini-2.5-flash': {
         'class': ChatGoogleGenerativeAI,
         'constructor_params': {'model': 'gemini-2.5-flash', 'google_api_key': GOOGLE_API_KEY }
