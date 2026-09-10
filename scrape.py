@@ -125,9 +125,12 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
             html = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
 
             soup = BeautifulSoup(html, "html.parser")
-            # Clean up text: remove scripts/styles
-            for script in soup(["script", "style"]):
-                script.extract()
+            # Remove scripts, styles and structural boilerplate. Menus, banners,
+            # footers and forms are the page's furniture, not its content, and
+            # feeding them to the summarizer both wastes context and invites the
+            # model to describe a site's navigation instead of its substance.
+            for tag in soup(["script", "style", "nav", "header", "footer", "aside", "form"]):
+                tag.extract()
             text = soup.get_text(separator=' ')
             # Normalize whitespace
             text = ' '.join(text.split())

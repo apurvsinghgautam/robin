@@ -166,14 +166,24 @@ _robin_cfg.CUSTOM_API_MODEL = st.session_state["custom_api_model"].strip() or No
 
 model_options = get_model_choices()
 model_display_names = get_model_display_names(model_options)
-default_model_index = (
-    next(
-        (idx for idx, name in enumerate(model_options) if name.lower() == "gpt4o"),
-        0,
-    )
-    if model_options
-    else 0
-)
+
+# Preselect an inexpensive recent model. Match on the tier token rather than a
+# model name: hardcoding one is what left "gpt4o" here long after that id was
+# retired, so the search always missed and silently fell through to index 0.
+# The registry already orders each provider newest-first, so the first token
+# match is the newest cheap model the user can actually reach.
+_CHEAP_TIER_TOKENS = ("nano", "mini", "flash-lite", "flash", "lite", "haiku", "small")
+
+
+def _default_model_index(options) -> int:
+    for token in _CHEAP_TIER_TOKENS:
+        for idx, name in enumerate(options):
+            if token in name.lower():
+                return idx
+    return 0
+
+
+default_model_index = _default_model_index(model_options) if model_options else 0
 
 if not model_options:
     st.sidebar.error(
@@ -191,7 +201,7 @@ model = st.sidebar.selectbox(
     index=default_model_index,
     key="model_select",
 )
-if any(name not in {"gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"} for name in model_options):
+if any(model_display_names.get(name, "").startswith("[ollama]") for name in model_options):
     st.sidebar.caption("Locally detected Ollama models are automatically added to this list.")
 
 with st.sidebar.expander("🔌 Custom API Provider"):
