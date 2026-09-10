@@ -141,13 +141,18 @@ def filter_results(llm, query, results):
     ]
 
     if not parsed_indices:
-        logging.warning(
-            "Unable to interpret LLM result selection ('%s'). "
-            "Defaulting to the top %s results.",
-            result_indices,
-            min(len(results), 20),
+        # No blind fallback. When the model selects nothing it is normally
+        # because nothing in the raw list actually matches the query, and
+        # forcing the top 20 through the scraper produced summaries written
+        # from irrelevant pages (issue #146). Reporting zero results is the
+        # honest answer; the caller stops the pipeline and says so.
+        logging.info(
+            "No relevant search results selected for query '%s' "
+            "(model returned: %r). Returning zero results.",
+            query,
+            (result_indices or "").strip()[:200],
         )
-        parsed_indices = list(range(1, min(len(results), 20) + 1))
+        return []
 
     top_results = [results[i - 1] for i in parsed_indices[:20]]
 

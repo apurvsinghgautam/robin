@@ -2,6 +2,7 @@ import requests
 import random, re
 import json
 import os
+from urllib.parse import urlparse, parse_qs, unquote
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
@@ -62,34 +63,83 @@ def get_tor_session():
     }
     return session
 
+ONION_URL_RE = re.compile(r'https?://[a-z0-9.-]+\.onion[^\s"\'<>]*', re.IGNORECASE)
+
+# Paths that are the engine's own result page rather than a discovered target.
+_SEARCH_PATHS = {"/search", "/index.php", "/search.php", "/oss/index.php"}
+
+
+def _extract_target_onion(href, engine_host):
+    """Return the external .onion URL an anchor points at, or None.
+
+    Two things make this less trivial than a regex match:
+
+    * Engines wrap results in their own redirect endpoint
+      (``/search/redirect?redirect_url=http://target.onion``), so the raw href
+      is on the engine's host even though it leads somewhere else.
+    * Engine pages are full of navigation, category, FAQ and footer links on
+      the engine's own host. Those are not search results and must not reach
+      the scraper — see issue #146, where reports were being written about a
+      search engine's own menu.
+    """
+    if not href:
+        return None
+
+    candidates = ONION_URL_RE.findall(href) or ONION_URL_RE.findall(unquote(href))
+    if not candidates:
+        return None
+
+    for url in candidates:
+        if (urlparse(url).hostname or "").lower() != engine_host:
+            return url
+
+    # Everything matched points back at the engine: unwrap a redirect target
+    # from the query string if there is one, otherwise it is internal navigation.
+    for values in parse_qs(urlparse(candidates[0]).query).values():
+        for value in values:
+            for nested in ONION_URL_RE.findall(unquote(value)):
+                if (urlparse(nested).hostname or "").lower() != engine_host:
+                    return nested
+    return None
+
+
+def _is_useful_title(title):
+    return bool(title) and 4 <= len(title) <= 200 and bool(re.search(r"[a-zA-Z0-9]", title))
+
+
 def fetch_search_results(endpoint, query):
     url = endpoint.format(query=query)
     headers = {"User-Agent": random.choice(USER_AGENTS)}
     session = get_tor_session()
-    
+
     try:
         response = session.get(url, headers=headers, timeout=40)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            links = []
-            # Generic parsing for standard search engine layouts
-            for a in soup.find_all('a'):
-                try:
-                    href = a['href']
-                    title = a.get_text(strip=True)
-                    # Extract onion links
-                    link = re.findall(r'https?:\/\/[a-z0-9\.]+\.onion.*', href)
-                    if len(link) != 0:
-                        # Basic filtering to avoid self-referential links
-                        if "search" not in link[0] and len(title) > 3:
-                            links.append({"title": title, "link": link[0]})
-                except:
-                    continue
-            return links
-        else:
+        if response.status_code != 200:
             return []
-    except:
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        engine_host = (urlparse(url).hostname or "").lower()
+        links = []
+
+        for a in soup.find_all("a"):
+            try:
+                target = _extract_target_onion(a.get("href"), engine_host)
+                if not target:
+                    continue
+                # Drop links to another engine's result page (path match only, so
+                # a target URL that merely contains the word "search" survives).
+                if urlparse(target).path.rstrip("/") in _SEARCH_PATHS:
+                    continue
+                title = a.get_text(strip=True)
+                if not _is_useful_title(title):
+                    continue
+                links.append({"title": title, "link": target})
+            except Exception:
+                continue
+        return links
+    except Exception:
         return []
+
 
 def get_search_results(refined_query, max_workers=5):
     results = []
@@ -100,15 +150,23 @@ def get_search_results(refined_query, max_workers=5):
             result_urls = future.result()
             results.extend(result_urls)
 
-    # Deduplicate results
+    # Deduplicate on scheme + host + path so that tracker-tagged and
+    # percent-encoded variants of the same page collapse into one result.
     seen_links = set()
     unique_results = []
     for res in results:
-        link = res.get("link")
-        # Remove trailing slashes for better deduplication
-        clean_link = link.rstrip('/')
+        link = res.get("link") or ""
+        try:
+            parsed = urlparse(link)
+            clean_link = "{}://{}{}".format(
+                parsed.scheme,
+                unquote(parsed.hostname or "").lower(),
+                unquote(parsed.path).rstrip("/"),
+            )
+        except Exception:
+            clean_link = link.rstrip("/")
         if clean_link not in seen_links:
             seen_links.add(clean_link)
             unique_results.append(res)
-            
+
     return unique_results

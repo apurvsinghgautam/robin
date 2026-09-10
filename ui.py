@@ -55,6 +55,17 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
     st.stop()
 
 
+def _render_no_results(headline: str, hints: list) -> None:
+    """Stop the pipeline and say plainly that nothing was found.
+
+    Robin used to fall through to scraping and summarizing whatever links it
+    happened to hold, which produced confident reports built from search engine
+    navigation pages (issue #146). An empty result is a real answer.
+    """
+    st.warning("🔍 {}\n\n{}".format(headline, "\n".join(hints)))
+    st.stop()
+
+
 # --- Investigation persistence ---
 
 INVESTIGATIONS_DIR = Path("investigations")
@@ -533,6 +544,16 @@ if _do_run:
             st.session_state.results = cached_search_results(
                 st.session_state.refined, threads
             )
+    if not st.session_state.results:
+        _render_no_results(
+            "No dark web results came back for this query.",
+            [
+                "- Try broader or differently worded search terms.",
+                "- Run **Check Search Engines** in the sidebar; onion engines have irregular uptime.",
+                "- Confirm Tor is running and reachable on `socks5h://127.0.0.1:9050`.",
+            ],
+        )
+
     # Cap results before LLM filter step
     if len(st.session_state.results) > max_results:
         st.session_state.results = st.session_state.results[:max_results]
@@ -547,6 +568,18 @@ if _do_run:
             st.session_state.filtered = filter_results(
                 llm, st.session_state.refined, st.session_state.results
             )
+    if not st.session_state.filtered:
+        _render_no_results(
+            "Found {} raw links, but none of them matched this query.".format(
+                len(st.session_state.results)
+            ),
+            [
+                "- The engines that responded returned nothing relevant to these terms.",
+                "- Try broader terms, or a different phrasing of the same question.",
+                "- Robin stops here on purpose rather than summarizing unrelated pages.",
+            ],
+        )
+
     # Cap filtered results before scraping
     if len(st.session_state.filtered) > max_scrape:
         st.session_state.filtered = st.session_state.filtered[:max_scrape]
