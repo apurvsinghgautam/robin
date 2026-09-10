@@ -18,5 +18,11 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Tor is ready."
+# Warm the model registry so the first page load already has a fresh list.
+# Never fatal: the bundled models.json seed covers an offline or Tor-only host.
+echo "Refreshing model list from providers..."
+python3 -c "import model_registry; model_registry.refresh(verbose=True)" || \
+  echo "Model refresh skipped; using bundled model list."
+
 echo "Starting Robin: AI-Powered Dark Web OSINT Tool..."
 exec streamlit run ui.py --server.port=8501 --server.address=0.0.0.0

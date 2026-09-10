@@ -61,6 +61,9 @@ def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> Non
 
     if "ChatAnthropic" in class_name:
         _require(ANTHROPIC_API_KEY, "ANTHROPIC_API_KEY", "Anthropic")
+    elif "ChatMistralAI" in class_name:
+        from config import MISTRAL_API_KEY
+        _require(MISTRAL_API_KEY, "MISTRAL_API_KEY", "Mistral")
     elif "ChatGoogleGenerativeAI" in class_name:
         _require(GOOGLE_API_KEY, "GOOGLE_API_KEY", "Google Gemini")
     elif "ChatOpenAI" in class_name:
