@@ -7,7 +7,7 @@
    <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
    <p>Robin is an AI-powered tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries, filter search results from dark web search engines, and provide an investigation summary.</p>
-   <a href="#installation">Installation</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
+   <a href="#installation">Installation</a> &bull; <a href="#troubleshooting">Troubleshooting</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
 </div>
 
 ![Demo](.github/assets/screen-ui.png)
@@ -92,6 +92,14 @@ streamlit run ui.py
 
 ---
 
+## Troubleshooting
+
+Empty model dropdown, Ollama not showing up, Tor `resolve failed` errors, 401s,
+or "no results found"? See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** before
+opening an issue.
+
+---
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request if you have major feature updates.
@@ -116,7 +124,6 @@ Open an Issue for any of these situations:
 - Tools inspiration from my [OSINT Tools for the Dark Web](https://github.com/apurvsinghgautam/dark-web-osint-tools) repository.
 - LLM Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
 - Logo Design by my friend [Tanishq Rupaal](https://github.com/Tanq16/)
-
 
 
 

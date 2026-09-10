@@ -122,7 +122,7 @@ def filter_results(llm, query, results):
         result_indices = chain.invoke({"query": query, "results": final_str})
     except openai.RateLimitError as e:
         print(
-            f"Rate limit error: {e} \n Truncating to Web titles only with 30 characters"
+            f"Rate limit error: {e} \n Truncating to Web titles only with {TRUNCATED_TITLE_CHARS} characters"
         )
         final_str = _generate_final_string(results, truncate=True)
         result_indices = chain.invoke({"query": query, "results": final_str})
@@ -162,14 +162,32 @@ def filter_results(llm, query, results):
     return top_results
 
 
+# How much of a title survives the rate-limit retry path. The old value of 30
+# characters cut most titles mid-word, which left the filtering model guessing
+# from fragments (issue #17). 120 sits in the range that issue asked for and
+# still cuts the payload enough for a retry to get under the limit.
+TRUNCATED_TITLE_CHARS = 120
+
+# Characters kept when sanitizing a scraped title. Braces are deliberately
+# excluded: dark web listings are full of them and they break LangChain prompt
+# templates. Everything else here is ordinary punctuation that carries meaning,
+# where the old alphanumeric-only scrub turned "ACME Corp: 400GB (leaked)" into
+# "ACME Corp  400GB  leaked ".
+_TITLE_ALLOWED = re.compile(r"[^0-9a-zA-Z\-\.,:;/_()'\"&!?#@+ ]")
+
+
+def _sanitize_title(title: str) -> str:
+    cleaned = _TITLE_ALLOWED.sub(" ", title or "")
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def _generate_final_string(results, truncate=False):
     """
     Generate a formatted string from the search results for LLM processing.
     """
 
     if truncate:
-        # Use only the first 35 characters of the title
-        max_title_length = 30
+        max_title_length = TRUNCATED_TITLE_CHARS
         # Do not use link at all
         max_link_length = 0
 
@@ -177,7 +195,7 @@ def _generate_final_string(results, truncate=False):
     for i, res in enumerate(results):
         # Truncate link at .onion for display
         truncated_link = re.sub(r"(?<=\.onion).*", "", res["link"])
-        title = re.sub(r"[^0-9a-zA-Z\-\.]", " ", res["title"])
+        title = _sanitize_title(res["title"])
         if truncated_link == "" and title == "":
             continue
 

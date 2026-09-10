@@ -1,0 +1,120 @@
+# Troubleshooting
+
+Most Robin problems fall into one of four buckets: Tor isn't ready, the LLM
+provider isn't configured the way Robin expects, the model list is stale, or the
+dark web genuinely had nothing to say about your query. Work through the section
+that matches what you're seeing.
+
+If none of this helps, open an issue and include the Robin version, how you're
+running it (Docker or local), the provider you selected, and the console output.
+
+---
+
+## The model dropdown is empty, or only shows one provider
+
+Robin only lists models for providers whose API key it can actually see. An
+empty dropdown means it found no keys at all.
+
+- Confirm your `.env` sits next to where you launched Robin, and that Docker is
+  mounting it: `-v "$(pwd)/.env:/app/.env"`.
+- You only need the key for the provider you intend to use. A `.env` containing
+  nothing but `ANTHROPIC_API_KEY` is fine, and Robin will show Claude models
+  only. There is no requirement to set `OPENAI_API_KEY` if you aren't using it.
+- Delete any `your_...` placeholder lines you didn't fill in. A placeholder is
+  treated as unset, and for `OPENROUTER_BASE_URL` it will override Robin's own
+  default.
+- Keys are read at startup. Restart Robin after editing `.env`.
+
+## Ollama models don't appear
+
+This is almost always the container being unable to reach Ollama on the host.
+
+1. In `.env`, set `OLLAMA_BASE_URL=http://host.docker.internal:11434` when
+   running under Docker. Use `http://127.0.0.1:11434` only when running Robin
+   directly on the host.
+2. Run the container with `--add-host=host.docker.internal:host-gateway`.
+3. Serve Ollama on all interfaces, not just loopback:
+   `OLLAMA_HOST=0.0.0.0 ollama serve &`
+4. Confirm you have actually pulled a model: `ollama list`. Robin lists what
+   Ollama reports, so an empty Ollama means an empty section in the picker.
+
+## "Model not found", "this model is out of date", or a failing connection check
+
+Providers retire models. From v2.9 Robin no longer ships a hardcoded model list;
+it asks each provider what it currently serves and caches the answer.
+
+- Restart Robin to force a refresh. The container refreshes on start.
+- Delete the cache to force a rebuild: remove `~/.robin/models_cache.json`, or
+  whatever `ROBIN_CACHE_DIR` points at.
+- Set `MODEL_REGISTRY_TTL_HOURS` to control how long a fetched list is reused.
+  The default is 24.
+- If a provider is unreachable, Robin keeps the last list it had rather than
+  emptying the picker, so a stale entry can survive an outage. A restart with
+  the network back will clear it.
+
+## 401 / "User not found" / authentication errors
+
+- Regenerate the key. This is by far the most common cause, especially on
+  OpenRouter, where the message reads `401 - User not found`.
+- Don't wrap values in quotes in `.env`. Write `OPENAI_API_KEY=sk-...`, not
+  `OPENAI_API_KEY="sk-..."`. Robin strips matched quotes defensively, but
+  unmatched ones will break.
+- Watch for trailing spaces and line breaks introduced by copy-paste from a
+  provider dashboard.
+- Confirm the key's account actually has access to the model you selected.
+
+## Tor problems
+
+Robin routes `.onion` traffic through `socks5h://127.0.0.1:9050` and lets Tor do
+the hostname resolution. It cannot work without a running Tor.
+
+**Tor never finishes bootstrapping.** Wait for `Bootstrapped 100% (done)` in the
+logs before running a search. On a slow connection this takes a minute or two.
+
+**`Closed N streams for service [scrubbed].onion for reason resolve failed.
+Fetch status: No more HSDir available to query.`** This is Tor saying the hidden
+service could not be found on the network right now. It is not a Robin error.
+Usually it means the onion service is down, or your circuit is unlucky. Run
+**Check Search Engines** in the sidebar to see which engines are actually
+responding, and retry.
+
+**Running from a censored network.** Robin does not manage bridges. Configure
+`obfs4` or `webtunnel` bridges in your own `torrc` and confirm Tor bootstraps to
+100% before starting Robin. Bridge questions are better raised with the Tor
+project than here; recycled bridge addresses from public channels are frequently
+blocked or rate-limited.
+
+## Search engine links look dead
+
+Onion services have irregular uptime. That is normal, and it's exactly why Robin
+queries many engines rather than one: it's unlikely they all go down together.
+Use **Check Search Engines** in the sidebar to see live status. An engine that
+was down yesterday is often back today, so please check before reporting a link
+as permanently dead.
+
+## "No results found" instead of a report
+
+From v2.9 Robin stops and tells you when a search returns nothing relevant,
+rather than summarizing whatever links it happened to hold. Earlier versions
+would fall back to the top raw links, which produced confident reports written
+from search engine navigation pages.
+
+If you're seeing this more than you expect:
+
+- Broaden the query. Very specific identifiers and non-English terms often have
+  no dark web presence at all, and that is a real answer.
+- Check how many engines responded. If only one or two did, coverage is thin.
+- Raise **Max Results to Filter** in the sidebar to give the filtering model
+  more candidates to work with.
+
+## Reporting a bug
+
+Include:
+
+- Robin version, and whether you're on Docker or a local install
+- The provider and model you selected
+- Whether Tor reached `Bootstrapped 100%`
+- The output of **Check Search Engines**
+- The full error text, not a screenshot crop
+
+Redact your API keys and any sensitive query terms before posting.
