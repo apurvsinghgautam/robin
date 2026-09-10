@@ -45,7 +45,7 @@
 > [!TIP]
 > You can provide your LLM of choice API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
 >
-> For Ollama, the sample `.env` already ships the Docker value, `OLLAMA_BASE_URL=http://host.docker.internal:11434`, so the recommended Docker install needs no change. Two things are still on you: run the container with `--add-host=host.docker.internal:host-gateway`, and serve Ollama on all interfaces rather than loopback, with `OLLAMA_HOST=0.0.0.0 ollama serve &`. If you run Robin directly with Python instead of Docker, change it to `http://127.0.0.1:11434`.
+> For Ollama, nothing goes in your `.env`. Robin defaults to `http://host.docker.internal:11434`, which is what the recommended Docker install needs. Two things are still on you: run the container with `--add-host=host.docker.internal:host-gateway`, and serve Ollama on all interfaces rather than loopback, with `OLLAMA_HOST=0.0.0.0 ollama serve &`. Running Robin directly with Python instead of Docker? Add `OLLAMA_BASE_URL=http://127.0.0.1:11434` to override the default.
 >
 > For any other OpenAI-compatible provider (LM Studio, llama.cpp, Groq, etc.), use the **🔌 Custom API Provider** expander in the sidebar — no `.env` changes required. Enter the base URL, an optional API key, and optionally a model name if the provider doesn't expose `/v1/models` for auto-discovery.
 

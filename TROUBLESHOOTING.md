@@ -20,9 +20,10 @@ empty dropdown means it found no keys at all.
 - You only need the key for the provider you intend to use. A `.env` containing
   nothing but `ANTHROPIC_API_KEY` is fine, and Robin will show Claude models
   only. There is no requirement to set `OPENAI_API_KEY` if you aren't using it.
-- Delete any `your_...` placeholder lines you didn't fill in. A placeholder is
-  treated as unset, and for `OPENROUTER_BASE_URL` it will override Robin's own
-  default.
+- Only API keys belong in `.env`. Everything else, Ollama's URL included, has a
+  working default in `config.py`; add a line only to override one.
+- Leftover `your_...` placeholders from an older sample file are harmless. Robin
+  treats them as unset and falls back to the default.
 - Keys are read at startup. Restart Robin after editing `.env`.
 
 ## Ollama models don't appear
