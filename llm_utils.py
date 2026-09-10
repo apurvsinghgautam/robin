@@ -13,6 +13,7 @@ except ImportError:  # pragma: no cover
 import model_registry
 from langchain_core.callbacks.base import BaseCallbackHandler
 import os
+import time
 from config import (
     OLLAMA_BASE_URL,
     OPENROUTER_BASE_URL,
@@ -110,12 +111,40 @@ def _normalize_model_name(name: str) -> str:
     return name.strip().lower()
 
 
+# Streamlit re-runs the whole script on every widget interaction, and the three
+# local-provider probes below are each called more than once per run. With a
+# provider configured but not actually running, every probe pays the full
+# connect timeout: measured at ~10s of added latency per rerun. A short memo
+# collapses that to one probe, while staying short enough that starting Ollama
+# shows up in the picker within half a minute.
+_PROBE_TTL_SECONDS = 30
+_PROBE_TIMEOUT = 2
+_probe_cache = {}
+
+
+def _ttl_cached(fn):
+    """Memoize a zero-argument probe for _PROBE_TTL_SECONDS."""
+    def wrapper():
+        now = time.monotonic()
+        cached = _probe_cache.get(fn.__name__)
+        if cached and now - cached[0] < _PROBE_TTL_SECONDS:
+            return cached[1]
+        value = fn()
+        _probe_cache[fn.__name__] = (now, value)
+        return value
+    wrapper.__name__ = fn.__name__
+    wrapper.__doc__ = fn.__doc__
+    wrapper.cache_clear = lambda: _probe_cache.pop(fn.__name__, None)
+    return wrapper
+
+
 def _get_ollama_base_url() -> Optional[str]:
     if not OLLAMA_BASE_URL:
         return None
     return OLLAMA_BASE_URL.rstrip("/") + "/"
 
 
+@_ttl_cached
 def fetch_ollama_models() -> List[str]:
     """
     Retrieve the list of locally available Ollama models by querying the Ollama HTTP API.
@@ -126,7 +155,7 @@ def fetch_ollama_models() -> List[str]:
         return []
 
     try:
-        resp = requests.get(urljoin(base_url, "api/tags"), timeout=3)
+        resp = requests.get(urljoin(base_url, "api/tags"), timeout=_PROBE_TIMEOUT)
         resp.raise_for_status()
         models = resp.json().get("models", [])
         available = []
@@ -146,6 +175,7 @@ def fetch_ollama_models() -> List[str]:
 
 
 # Added Support for llama.cpp models since they use OpenAI-compatible API
+@_ttl_cached
 def fetch_llama_cpp_models() -> List[str]:
     """
     Retrieve available models from an OpenAI-compatible llama.cpp server.
@@ -156,7 +186,7 @@ def fetch_llama_cpp_models() -> List[str]:
 
     base = LLAMA_CPP_BASE_URL.rstrip("/")
     try:
-        resp = requests.get(f"{base}/v1/models", timeout=3)
+        resp = requests.get(f"{base}/v1/models", timeout=_PROBE_TIMEOUT)
         resp.raise_for_status()
         data = resp.json().get("data", [])
         return [m["id"] for m in data if "id" in m]
@@ -164,6 +194,7 @@ def fetch_llama_cpp_models() -> List[str]:
         return []
 
 
+@_ttl_cached
 def fetch_custom_api_models() -> List[str]:
     """Retrieve models from any OpenAI-compatible API endpoint."""
     if not config.CUSTOM_API_BASE_URL:
@@ -172,7 +203,7 @@ def fetch_custom_api_models() -> List[str]:
     if not base.endswith("/v1"):
         base += "/v1"
     try:
-        resp = requests.get(f"{base}/models", timeout=3)
+        resp = requests.get(f"{base}/models", timeout=_PROBE_TIMEOUT)
         resp.raise_for_status()
         return [m["id"] for m in resp.json().get("data", []) if "id" in m]
     except (requests.RequestException, ValueError, KeyError):
