@@ -122,20 +122,30 @@ _PROBE_TIMEOUT = 2
 _probe_cache = {}
 
 
-def _ttl_cached(fn):
-    """Memoize a zero-argument probe for _PROBE_TTL_SECONDS."""
-    def wrapper():
-        now = time.monotonic()
-        cached = _probe_cache.get(fn.__name__)
-        if cached and now - cached[0] < _PROBE_TTL_SECONDS:
-            return cached[1]
-        value = fn()
-        _probe_cache[fn.__name__] = (now, value)
-        return value
-    wrapper.__name__ = fn.__name__
-    wrapper.__doc__ = fn.__doc__
-    wrapper.cache_clear = lambda: _probe_cache.pop(fn.__name__, None)
-    return wrapper
+def _ttl_cached(identity):
+    """Memoize a zero-argument probe for _PROBE_TTL_SECONDS.
+
+    `identity` returns whatever the probe's result depends on, and is part of
+    the cache key. That matters for the custom provider, whose URL and key are
+    typed into the sidebar and changed mid-session: keying on the function name
+    alone would keep serving the old endpoint's answer for the whole TTL, so a
+    user would enter a Base URL and watch nothing happen.
+    """
+    def decorator(fn):
+        def wrapper():
+            key = (fn.__name__, identity())
+            now = time.monotonic()
+            cached = _probe_cache.get(key)
+            if cached and now - cached[0] < _PROBE_TTL_SECONDS:
+                return cached[1]
+            value = fn()
+            _probe_cache[key] = (now, value)
+            return value
+        wrapper.__name__ = fn.__name__
+        wrapper.__doc__ = fn.__doc__
+        wrapper.cache_clear = _probe_cache.clear
+        return wrapper
+    return decorator
 
 
 def _get_ollama_base_url() -> Optional[str]:
@@ -144,7 +154,7 @@ def _get_ollama_base_url() -> Optional[str]:
     return OLLAMA_BASE_URL.rstrip("/") + "/"
 
 
-@_ttl_cached
+@_ttl_cached(lambda: OLLAMA_BASE_URL)
 def fetch_ollama_models() -> List[str]:
     """
     Retrieve the list of locally available Ollama models by querying the Ollama HTTP API.
@@ -175,7 +185,7 @@ def fetch_ollama_models() -> List[str]:
 
 
 # Added Support for llama.cpp models since they use OpenAI-compatible API
-@_ttl_cached
+@_ttl_cached(lambda: LLAMA_CPP_BASE_URL)
 def fetch_llama_cpp_models() -> List[str]:
     """
     Retrieve available models from an OpenAI-compatible llama.cpp server.
@@ -194,7 +204,7 @@ def fetch_llama_cpp_models() -> List[str]:
         return []
 
 
-@_ttl_cached
+@_ttl_cached(lambda: (config.CUSTOM_API_BASE_URL, config.CUSTOM_API_KEY))
 def fetch_custom_api_models() -> List[str]:
     """Retrieve models from any OpenAI-compatible API endpoint."""
     if not config.CUSTOM_API_BASE_URL:
