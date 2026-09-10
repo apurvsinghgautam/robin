@@ -316,7 +316,14 @@ def resolve_model_config(model_choice: str):
         if _normalize_model_name(ollama_model) == model_choice_lower:
             return {
                 "class": ChatOllama,
-                "constructor_params": {"model": ollama_model, "base_url": OLLAMA_BASE_URL},
+                "constructor_params": {
+                    "model": ollama_model,
+                    "base_url": OLLAMA_BASE_URL,
+                    # Without this, Ollama's own default window applies and the
+                    # tail of every investigation is dropped before the model
+                    # ever sees it, however large the model's real context is.
+                    "num_ctx": config.OLLAMA_NUM_CTX,
+                },
             }
 
     return None

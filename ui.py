@@ -112,8 +112,9 @@ def cached_search_results(refined_query: str, threads: int):
 
 
 @st.cache_data(ttl=200, show_spinner=False)
-def cached_scrape_multiple(filtered: list, threads: int):
-    return scrape_multiple(filtered, max_workers=threads)
+def cached_scrape_multiple(filtered: list, threads: int, content_chars: int):
+    return scrape_multiple(filtered, max_workers=threads,
+                           max_return_chars=content_chars)
 
 
 # Streamlit page configuration
@@ -231,6 +232,18 @@ max_results = st.sidebar.slider(
 max_scrape = st.sidebar.slider(
     "Max Pages to Scrape", 3, 20, 10, key="max_scrape_slider",
     help="Cap the number of filtered results that get scraped for content.",
+)
+content_chars = st.sidebar.slider(
+    "Content per Page (characters)", 1000, 20000, 8000, step=1000,
+    key="content_chars_slider",
+    help="How much of each scraped page the model reads. Higher means richer "
+         "reports and more tokens per investigation. Raising this does not slow "
+         "down the Tor scrape.",
+)
+st.sidebar.caption(
+    "~{:,} characters (~{:,} tokens) sent to the model per investigation.".format(
+        content_chars * max_scrape, (content_chars * max_scrape) // 4
+    )
 )
 
 st.sidebar.divider()
@@ -481,9 +494,14 @@ def _render_chat_panel(inv):
     if followup:
         with st.chat_message("user"):
             st.markdown(followup)
+        # Budget the follow-up against the same amount of evidence the summary
+        # saw. A fixed 12,000 would answer chat questions from a fraction of a
+        # high-budget investigation while the report used all of it.
+        _inv_budget = inv.get("content_chars") and inv.get("max_scrape")
         context = build_followup_context(
             inv.get("query", ""), inv.get("refined", ""),
             inv.get("sources", []), inv.get("scraped"), inv.get("summary", ""),
+            char_budget=(inv["content_chars"] * inv["max_scrape"]) if _inv_budget else 12000,
         )
         history = _followup_history_messages(st.session_state.get("chat_history", []))
         with st.chat_message("assistant"):
@@ -603,7 +621,7 @@ if _do_run:
     with status_slot.container():
         with st.spinner("📜 Scraping content..."):
             st.session_state.scraped = cached_scrape_multiple(
-                st.session_state.filtered, threads
+                st.session_state.filtered, threads, content_chars
             )
 
     # Stage 6 - Summarize (streaming)
@@ -685,6 +703,8 @@ if _do_run:
         "scraped": st.session_state.scraped,
         "summary": st.session_state.streamed_summary,
         "results_count": len(st.session_state.results),
+        "content_chars": content_chars,
+        "max_scrape": max_scrape,
     }
     st.session_state["chat_history"] = []
 

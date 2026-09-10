@@ -26,7 +26,13 @@ USER_AGENTS = [
 
 MAX_DOWNLOAD_BYTES = 1_000_000
 MAX_EXTRACTED_TEXT_CHARS = 50_000
-MAX_RETURN_CHARS = 2_000
+# Characters of each scraped page handed to the LLM. This is the budget that
+# decides how much of a page the summarizer actually reads: Robin downloads up
+# to MAX_DOWNLOAD_BYTES and extracts up to MAX_EXTRACTED_TEXT_CHARS, then trims
+# to this. At 2_000 it was two or three paragraphs, so record counts, prices and
+# dates further down a listing never reached the model. Overridable per run from
+# the sidebar; this is only the default.
+MAX_RETURN_CHARS = 8_000
 ALLOWED_CONTENT_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
 _thread_local = threading.local()
 _logger = logging.getLogger(__name__)
@@ -148,10 +154,14 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
 
     return url, scraped_text
 
-def scrape_multiple(urls_data, max_workers=5):
+def scrape_multiple(urls_data, max_workers=5, max_return_chars=None):
     """
     Scrapes multiple URLs concurrently using a thread pool.
+
+    `max_return_chars` is how much of each page survives to the LLM. Trimming
+    happens after extraction, so raising it costs tokens, never extra Tor time.
     """
+    max_return_chars = MAX_RETURN_CHARS if max_return_chars is None else max(500, int(max_return_chars))
     results = {}
     max_workers = max(1, min(int(max_workers), 16))
     if not isinstance(urls_data, (list, tuple)):
@@ -177,13 +187,13 @@ def scrape_multiple(urls_data, max_workers=5):
                 url, content = future.result()
                 if not url:
                     continue
-                if len(content) > MAX_RETURN_CHARS:
+                if len(content) > max_return_chars:
                     suffix = "...(truncated)"
-                    if len(suffix) >= MAX_RETURN_CHARS:
-                        # Fallback: ensure we never exceed MAX_RETURN_CHARS even if suffix is long
-                        content = suffix[:MAX_RETURN_CHARS]
+                    if len(suffix) >= max_return_chars:
+                        # Never exceed the budget even if the suffix is long
+                        content = suffix[:max_return_chars]
                     else:
-                        available = MAX_RETURN_CHARS - len(suffix)
+                        available = max_return_chars - len(suffix)
                         content = content[:available] + suffix
                 results[url] = content
             except Exception as exc:

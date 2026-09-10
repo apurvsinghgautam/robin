@@ -41,6 +41,15 @@ OLLAMA_BASE_URL = _clean_env("OLLAMA_BASE_URL", "http://host.docker.internal:114
 OPENROUTER_BASE_URL = _clean_env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 OPENROUTER_API_KEY = _clean_env("OPENROUTER_API_KEY")
 MISTRAL_API_KEY = _clean_env("MISTRAL_API_KEY")
+
+# Ollama applies its own context window rather than the model's full capability,
+# and Robin never used to override it, so a 128k-capable local model silently
+# truncated every investigation. Sized to hold the default content budget with
+# room for the prompt and answer. Costs RAM: lower it on a constrained machine.
+try:
+	OLLAMA_NUM_CTX = int(_clean_env("OLLAMA_NUM_CTX", "32768"))
+except (TypeError, ValueError):
+	OLLAMA_NUM_CTX = 32768
 LLAMA_CPP_BASE_URL = _clean_env("LLAMA_CPP_BASE_URL")
 CUSTOM_API_BASE_URL = _clean_env("CUSTOM_API_BASE_URL")
 CUSTOM_API_KEY = _clean_env("CUSTOM_API_KEY")

@@ -53,6 +53,18 @@ it asks each provider what it currently serves and caches the answer.
   emptying the picker, so a stale entry can survive an outage. A restart with
   the network back will clear it.
 
+## Local model answers ignore the end of the investigation
+
+Ollama applies its own context window rather than the model's full capability,
+so a 128k-capable model can still be truncated to a few thousand tokens. Robin
+now sets it explicitly, defaulting to 32768.
+
+- Lower it if your machine is short on RAM: `OLLAMA_NUM_CTX=8192` in `.env`.
+- Keep it above the budget you asked for. The sidebar caption under **Content
+  per Page** shows the estimated tokens per investigation; the window needs to
+  hold that plus the prompt and the answer.
+- Reducing **Content per Page** or **Max Pages to Scrape** is the other lever.
+
 ## 401 / "User not found" / authentication errors
 
 - Regenerate the key. This is by far the most common cause, especially on
