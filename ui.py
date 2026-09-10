@@ -576,7 +576,8 @@ if _do_run:
     with status_slot.container():
         with st.spinner("🗂️ Filtering results..."):
             st.session_state.filtered = filter_results(
-                llm, st.session_state.refined, st.session_state.results
+                llm, st.session_state.refined, st.session_state.results,
+                limit=max_scrape,
             )
     if not st.session_state.filtered:
         _render_no_results(

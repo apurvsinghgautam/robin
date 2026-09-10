@@ -101,22 +101,35 @@ def refine_query(llm, user_input):
     return chain.invoke({"query": user_input})
 
 
-def filter_results(llm, query, results):
+def filter_results(llm, query, results, limit=20):
+    """Pick the results worth scraping, most relevant first.
+
+    `limit` is the caller's real budget, not a fixed 20. The UI throws away
+    anything past its "Max Pages to Scrape" slider, so asking the model for 20
+    when the user set 5 made it rank fifteen results nobody would ever read and
+    left a hidden third cap between two visible sliders.
+    """
     if not results:
         return []
 
+    limit = max(1, int(limit))
+
     system_prompt = """
     You are a Dark Web Search Result Analyst. You are given a user search query and a list of dark web search results (index, link, title).
-    Your task is to select the results that are most relevant to the user's search query topic.
+    Your task is to select up to {limit} results that are most relevant to the user's search query topic.
     Rules:
     1. Select results based on how well they match the topic of the search query, not on how "cyber-crime-like" they look. If the query is about financial data or stock markets, prefer results about financial databases, data leaks or market data, NOT generic hacking or malware sites.
-    2. Output ONLY at most the top 20 indices (comma-separated list) that best match the input query, no more than 20.
+    2. Output ONLY at most the top {limit} indices (comma-separated list) that best match the input query, no more than {limit}.
     3. Do not repeat indices. Each index must appear at most once in your output.
     4. If none of the results are relevant to the query, output nothing at all. An empty answer is correct and expected when the search returned nothing on topic. Never pad the list with results you do not believe match.
 
     Search Query: {query}
     Search Results:
     """
+
+    # Substitute the budget before the template is built, so ChatPromptTemplate
+    # still sees only {query} as a variable.
+    system_prompt = system_prompt.replace("{limit}", str(limit))
 
     final_str = _generate_final_string(results)
 
@@ -133,9 +146,15 @@ def filter_results(llm, query, results):
         final_str = _generate_final_string(results, truncate=True)
         result_indices = chain.invoke({"query": query, "results": final_str})
 
-    # Select top_k results using original (non-truncated) results
+    # Select top_k results using original (non-truncated) results.
+    #
+    # Strip a leading label before parsing. Models routinely answer "Top 7:
+    # 3, 9, 12" or "Indices: 3, 9", and a bare \d+ scan reads the label's own
+    # number as a selected index. Also require that a digit run is not glued to
+    # a word or a minus sign, so "-4" and "v2" do not become selections.
+    payload = re.sub(r"^[^,\n]{0,40}?:", "", result_indices.strip(), count=1)
     parsed_indices = []
-    for match in re.findall(r"\d+", result_indices):
+    for match in re.findall(r"(?<![\w-])(\d+)(?![\w])", payload):
         try:
             idx = int(match)
             if 1 <= idx <= len(results):
@@ -163,7 +182,7 @@ def filter_results(llm, query, results):
         )
         return []
 
-    top_results = [results[i - 1] for i in parsed_indices[:20]]
+    top_results = [results[i - 1] for i in parsed_indices[:limit]]
 
     return top_results
 
