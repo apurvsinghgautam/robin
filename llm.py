@@ -101,8 +101,13 @@ def refine_query(llm, user_input):
     return chain.invoke({"query": user_input})
 
 
-_RANGE_RE = re.compile(r"(?<![\w-])(\d+)\s*[-\u2013]\s*(\d+)(?![\w])")
+# A range lives on ONE line. With \s* the newline in "- 3\n- 9" was eaten and
+# the bullet hyphen read as a range dash, inventing 4,5,6,7,8 as selections.
+_RANGE_RE = re.compile(r"(?<![\w-])(\d+)[ \t]*[-\u2013][ \t]*(\d+)(?![\w])")
 _INDEX_RE = re.compile(r"(?<![\w-])(\d+)(?![\w])")
+# Markdown list markers. The ordinal in "1. Index 3" numbers the list, not the
+# result, so it must not reach the index scan.
+_LIST_MARKER_RE = re.compile(r"(?m)^[ \t]*(?:\d+[.)]|[-*\u2022])[ \t]+")
 
 
 def _iter_selected_indices(payload, max_span=100):
@@ -111,7 +116,11 @@ def _iter_selected_indices(payload, max_span=100):
     A bare digit scan read "1-5" as the single index 1 and silently dropped the
     other four. Ranges are expanded in order; an implausibly wide one is treated
     as two separate numbers rather than flooding the selection.
+
+    Models answer in markdown as often as in prose, so list markers are removed
+    first: "- 3\n- 9" and "1. 3\n2. 9" both mean indices 3 and 9.
     """
+    payload = _LIST_MARKER_RE.sub("", payload or "")
     consumed = []
     for match in _RANGE_RE.finditer(payload):
         start, end = int(match.group(1)), int(match.group(2))
@@ -132,19 +141,30 @@ def _iter_selected_indices(payload, max_span=100):
     return out
 
 
+# A second labelled line the model appended after its selection, e.g.
+# "Reasoning: ..." or "Note: ...". Its prose carries years and URLs that the
+# index scanner would otherwise read as selections.
+_TRAILING_LABEL_RE = re.compile(r"\n\s*[A-Za-z][^\n:]{0,40}:")
+
+
 def _strip_leading_label(reply):
     """Drop a model's prose label so its numbers are not read as selections.
 
     Models answer "Top 5 results, ranked by relevance: 3, 9, 12". Taking the
-    text after the last colon handles that, plus "Selected indices:\\n1, 4, 9"
+    text after the FIRST colon handles that, plus "Selected indices:\\n1, 4, 9"
     and JSON like {"indices": [2, 5, 9]}. Only applied when digits actually
     follow the colon, so "1, 2, 3: my picks" is left alone.
+
+    The last colon is the wrong one: "Indices: 3, 9\\nReasoning: the 2024 breach"
+    would keep only the reasoning, parse 2024, and report that nothing matched.
+    Any trailing labelled line is cut for the same reason.
     """
     text = (reply or "").strip()
-    head, sep, tail = text.rpartition(":")
-    if sep and re.search(r"\d", tail):
-        return tail
-    return text
+    head, sep, tail = text.partition(":")
+    if not (sep and re.search(r"\d", tail)):
+        return text
+    cut = _TRAILING_LABEL_RE.search(tail)
+    return tail[:cut.start()] if cut else tail
 
 
 def filter_results(llm, query, results, limit=20):
