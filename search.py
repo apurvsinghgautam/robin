@@ -1,6 +1,6 @@
 import requests
 import random, re
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs, parse_qsl, urlencode, unquote
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
@@ -153,6 +153,36 @@ def fetch_search_results(endpoint, query):
         return []
 
 
+# Parameters that identify a referrer or campaign rather than the content.
+_TRACKING_PARAMS = {
+    "utm", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "ref", "referrer", "fbclid", "gclid", "yclid", "msclkid", "src",
+}
+
+
+def _dedup_key(link):
+    """Identity of a page for deduplication.
+
+    The query string is part of that identity. Dropping it entirely collapsed
+    /viewtopic.php?t=1, ?t=2 and ?t=3 into a single result, and query-addressed
+    URLs are the dominant shape on onion forums and markets, so a board with a
+    dozen matching threads reported one. Only tracking parameters are stripped,
+    which is all the deduplication was ever trying to achieve.
+    """
+    parsed = urlparse(link or "")
+    kept = [
+        (k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+        if k.lower() not in _TRACKING_PARAMS
+    ]
+    query = urlencode(sorted(kept), doseq=True)
+    return "{}://{}{}{}".format(
+        parsed.scheme,
+        unquote(parsed.hostname or "").lower(),
+        unquote(parsed.path).rstrip("/"),
+        "?" + query if query else "",
+    )
+
+
 def get_search_results(refined_query, max_workers=5):
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -169,12 +199,7 @@ def get_search_results(refined_query, max_workers=5):
     for res in results:
         link = res.get("link") or ""
         try:
-            parsed = urlparse(link)
-            clean_link = "{}://{}{}".format(
-                parsed.scheme,
-                unquote(parsed.hostname or "").lower(),
-                unquote(parsed.path).rstrip("/"),
-            )
+            clean_link = _dedup_key(link)
         except Exception:
             clean_link = link.rstrip("/")
         if clean_link not in seen_links:

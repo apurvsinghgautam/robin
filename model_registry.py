@@ -232,11 +232,21 @@ def configured_providers() -> List[str]:
 
 
 def _load_json_file(path: Path) -> Optional[dict]:
+    """Load a JSON object, or None for anything unusable.
+
+    The isinstance check is load-bearing. A file containing valid JSON that is
+    not an object (a torn write leaving "[1,2,3]", say) used to parse fine and
+    then raise AttributeError on .get, which llm_utils swallowed as "registry
+    unavailable". refresh() was never reached, so the bad file was never
+    rewritten and every cloud model stayed missing from the picker on every
+    launch until the user deleted it by hand.
+    """
     try:
         with path.open() as handle:
-            return json.load(handle)
+            payload = json.load(handle)
     except (OSError, ValueError):
         return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _load_seed() -> Dict[str, List[str]]:
@@ -244,20 +254,30 @@ def _load_seed() -> Dict[str, List[str]]:
     return payload.get("providers", {})
 
 
-def _load_cache() -> Optional[Dict[str, List[str]]]:
+def _load_cache(ignore_ttl: bool = False) -> Optional[Dict[str, List[str]]]:
+    """The last fetched lists. `ignore_ttl` returns them however old they are.
+
+    An expired cache is stale, not worthless: it is still a better record of
+    what a provider serves than the seed baked into the image months ago.
+    """
     payload = _load_json_file(CACHE_PATH)
     if not payload:
         return None
-    if time.time() - payload.get("fetched_at", 0) > CACHE_TTL_SECONDS:
+    if not ignore_ttl and time.time() - payload.get("fetched_at", 0) > CACHE_TTL_SECONDS:
         return None
-    return payload.get("providers", {})
+    providers = payload.get("providers")
+    return providers if isinstance(providers, dict) else None
 
 
 def _write_cache(providers: Dict[str, List[str]]) -> None:
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        with CACHE_PATH.open("w") as handle:
+        # Write to a sibling and rename, so a crash or a full disk mid-write
+        # cannot leave a half-written cache behind.
+        tmp = CACHE_PATH.with_suffix(".tmp")
+        with tmp.open("w") as handle:
             json.dump({"fetched_at": time.time(), "providers": providers}, handle, indent=2)
+        os.replace(tmp, CACHE_PATH)
     except OSError as exc:
         # A read-only filesystem is fine; the registry just refetches next start.
         logger.debug("Could not write model cache: %s", exc)
@@ -269,7 +289,13 @@ def refresh(verbose: bool = False) -> Dict[str, List[str]]:
     Providers that fail keep whatever the previous layer knew about them, so one
     dead key or one unreachable API never empties the picker.
     """
-    merged = dict(_load_cache() or _load_seed())
+    # Seed first, then whatever we last fetched on top of it, expired or not.
+    # `_load_cache() or _load_seed()` threw the last-known lists away the moment
+    # they aged past the TTL, so a provider that failed to refresh regressed to
+    # the shipped seed and that regression was written back with a fresh
+    # timestamp, contradicting this function's own fallback promise.
+    merged = dict(_load_seed())
+    merged.update(_load_cache(ignore_ttl=True) or {})
     for name in configured_providers():
         try:
             models = PROVIDERS[name]["fetch"]()
