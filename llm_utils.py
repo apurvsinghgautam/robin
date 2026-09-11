@@ -6,15 +6,20 @@ from langchain_ollama import ChatOllama
 from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
+try:  # optional: only needed when a Mistral key is configured
+    from langchain_mistralai import ChatMistralAI
+except ImportError:  # pragma: no cover
+    ChatMistralAI = None
+import model_registry
 from langchain_core.callbacks.base import BaseCallbackHandler
-import os
+import hashlib
+import re
+import time
 from config import (
     OLLAMA_BASE_URL,
-    OPENROUTER_BASE_URL,
     OPENROUTER_API_KEY,
     GOOGLE_API_KEY,
     OPENAI_API_KEY,
-    ANTHROPIC_API_KEY,
     LLAMA_CPP_BASE_URL,
 )
 
@@ -45,143 +50,126 @@ class BufferedStreamingHandler(BaseCallbackHandler):
 # Instantiate common dependencies once
 _common_callbacks = [BufferedStreamingHandler(buffer_limit=60)]
 
-# Define common parameters for most LLMs
+# Parameters every client gets. temperature is deliberately NOT here: OpenAI's
+# reasoning and gpt-5 family reject an explicit temperature outright
+# ("Unsupported value: 'temperature' does not support 0 with this model"), and
+# sending it to gpt-5-nano, o3 or o4-mini fails the very first request. Each
+# provider adds temperature only where it is accepted.
 _common_llm_params = {
-    "temperature": 0,
     "streaming": True,
     "callbacks": _common_callbacks,
 }
 
-# Map input model choices (lowercased) to their configuration
-# Each config includes the class and any model-specific constructor parameters
-_llm_config_map = {
-    'gpt-4.1': {
-        'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-4.1'} 
-    },
-    'gpt-5.2': {
-        'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-5.2'} 
-    },
-    'gpt-5.1': {
-        'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-5.1'} 
-    },
-    'gpt-5-mini': {
-        'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-5-mini'} 
-    },
-    'gpt-5-nano': { 
-        'class': ChatOpenAI,
-        'constructor_params': {'model_name': 'gpt-5-nano'} 
-    },
-    'claude-sonnet-4-5': {
-        'class': ChatAnthropic,
-        'constructor_params': {'model': 'claude-sonnet-4-5'}
-    },
-    'claude-sonnet-4-0': {
-        'class': ChatAnthropic,
-        'constructor_params': {'model': 'claude-sonnet-4-0'}
-    },
-    'gemini-2.5-flash': {
-        'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-flash', 'google_api_key': GOOGLE_API_KEY }
-    },
-    'gemini-2.5-flash-lite': {
-        'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-flash-lite', 'google_api_key': GOOGLE_API_KEY}
-    },
-    'gemini-2.5-pro': {
-        'class': ChatGoogleGenerativeAI,
-        'constructor_params': {'model': 'gemini-2.5-pro', 'google_api_key': GOOGLE_API_KEY}
-    },
-    'qwen3-80b-openrouter': {
-        'class': ChatOpenAI,
-        'constructor_params': {
-            'model_name': 'qwen/qwen3-next-80b-a3b-instruct:free',
-            'base_url': OPENROUTER_BASE_URL,
-            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
-        }
-    },
-    'nemotron-nano-9b-openrouter': {
-        'class': ChatOpenAI,
-        'constructor_params': {
-            'model_name': 'nvidia/nemotron-nano-9b-v2:free',
-            'base_url': OPENROUTER_BASE_URL,
-            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
-        }
-    },
-    'gpt-oss-120b-openrouter': {
-        'class': ChatOpenAI,
-        'constructor_params': {
-            'model_name': 'openai/gpt-oss-120b:free',
-            'base_url': OPENROUTER_BASE_URL,
-            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
-        }
-    },
-    'gpt-5.1-openrouter': {
-        'class': ChatOpenAI,
-        'constructor_params': {
-            'model_name': 'openai/gpt-5.1',
-            'base_url': OPENROUTER_BASE_URL,
-            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
-        }
-    },
-    'gpt-5-mini-openrouter': {
-        'class': ChatOpenAI,
-        'constructor_params': {
-            'model_name': 'openai/gpt-5-mini',
-            'base_url': OPENROUTER_BASE_URL,
-            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
-        }
-    },
-    'claude-sonnet-4.5-openrouter': {
-        'class': ChatOpenAI,
-        'constructor_params': {
-            'model_name': 'anthropic/claude-sonnet-4.5',
-            'base_url': OPENROUTER_BASE_URL,
-            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
-        }
-    },
-    'grok-4.1-fast-openrouter': {
-        'class': ChatOpenAI,
-        'constructor_params': {
-            'model_name': 'x-ai/grok-4.1-fast',
-            'base_url': OPENROUTER_BASE_URL,
-            'api_key': OPENROUTER_API_KEY  # Use OpenRouter API key
-        }
-    },
-    # 'llama3.2': {
-    #     'class': ChatOllama,
-    #     'constructor_params': {'model': 'llama3.2:latest', 'base_url': OLLAMA_BASE_URL}
-    # },
-    # 'llama3.1': {
-    #     'class': ChatOllama,
-    #     'constructor_params': {'model': 'llama3.1:latest', 'base_url': OLLAMA_BASE_URL}
-    # },
-    # 'gemma3': {
-    #     'class': ChatOllama,
-    #     'constructor_params': {'model': 'gemma3:latest', 'base_url': OLLAMA_BASE_URL}
-    # },
-    # 'deepseek-r1': {
-    #     'class': ChatOllama,
-    #     'constructor_params': {'model': 'deepseek-r1:latest', 'base_url': OLLAMA_BASE_URL}
-    # },
-    
-    # Add more models here easily:
-    # 'mistral7b': {
-    #     'class': ChatOllama,
-    #     'constructor_params': {'model': 'mistral:7b', 'base_url': OLLAMA_BASE_URL}
-    # },
-    # 'gpt3.5': {
-    #      'class': ChatOpenAI,
-    #      'constructor_params': {'model_name': 'gpt-3.5-turbo', 'base_url': OLLAMA_BASE_URL}
-    # }
-}
+# OpenAI families that still accept an explicit temperature. Treated as an
+# allowlist rather than a denylist of reasoning models, because omitting
+# temperature always works while sending it to a model that refuses it is a
+# hard failure, and new model families appear faster than this list can track.
+_TEMPERATURE_OK = re.compile(r"^(gpt-3\.5|gpt-4|chatgpt-4)", re.IGNORECASE)
+
+
+def _openai_temperature(model_name: str) -> dict:
+    bare = model_name.split("/", 1)[-1]
+    return {"temperature": 0} if _TEMPERATURE_OK.match(bare) else {}
+
+# Model IDs are no longer hardcoded here. `model_registry` asks each provider
+# what it currently serves (see that module's docstring and issue #140); this
+# table only says how to *construct* a client once a model has been chosen.
+#
+# Anything Robin can reach through a first-party API is constructed against that
+# API. The OpenRouter branch is used only for models with no first-party path,
+# or when the first-party key is missing — the registry decides which.
+
+
+def _openrouter_base() -> str:
+    return model_registry._openrouter_base()
+
+
+def _provider_constructor(provider: str, model_name: str) -> Optional[dict]:
+    """Return {"class", "constructor_params"} for a registry entry."""
+    if provider == "openai":
+        return {"class": ChatOpenAI,
+                "constructor_params": dict(model_name=model_name,
+                                           **_openai_temperature(model_name))}
+    if provider == "anthropic":
+        return {"class": ChatAnthropic,
+                "constructor_params": {"model": model_name, "temperature": 0}}
+    if provider == "google":
+        return {"class": ChatGoogleGenerativeAI,
+                "constructor_params": {"model": model_name, "temperature": 0,
+                                       "google_api_key": GOOGLE_API_KEY}}
+    if provider == "mistral":
+        if ChatMistralAI is None:
+            return None
+        return {"class": ChatMistralAI,
+                "constructor_params": {"model": model_name, "temperature": 0,
+                                       "api_key": config.MISTRAL_API_KEY}}
+    if provider == "openrouter":
+        # An OpenRouter id carries its vendor as a prefix, so the same rule
+        # applies to the OpenAI models served through it.
+        return {"class": ChatOpenAI,
+                "constructor_params": dict(model_name=model_name,
+                                           base_url=_openrouter_base(),
+                                           api_key=OPENROUTER_API_KEY,
+                                           **(_openai_temperature(model_name)
+                                              if model_name.startswith("openai/")
+                                              else {"temperature": 0}))}
+    return None
+
+
+def _registry_entries(force_refresh: bool = False) -> List[dict]:
+    """Registry entries, or an empty list if the registry is unusable."""
+    try:
+        return model_registry.get_entries(force_refresh=force_refresh)
+    except Exception as exc:  # noqa: BLE001 - never let the picker hard-fail
+        import logging
+        logging.warning("Model registry unavailable (%s).", str(exc)[:120])
+        return []
 
 
 def _normalize_model_name(name: str) -> str:
     return name.strip().lower()
+
+
+# Streamlit re-runs the whole script on every widget interaction, and the three
+# local-provider probes below are each called more than once per run. With a
+# provider configured but not actually running, every probe pays the full
+# connect timeout: measured at ~10s of added latency per rerun. A short memo
+# collapses that to one probe, while staying short enough that starting Ollama
+# shows up in the picker within half a minute.
+_PROBE_TTL_SECONDS = 30
+_PROBE_TIMEOUT = 2
+_probe_cache = {}
+
+
+def _ttl_cached(identity):
+    """Memoize a zero-argument probe for _PROBE_TTL_SECONDS.
+
+    `identity` returns whatever the probe's result depends on, and is part of
+    the cache key. That matters for the custom provider, whose URL and key are
+    typed into the sidebar and changed mid-session: keying on the function name
+    alone would keep serving the old endpoint's answer for the whole TTL, so a
+    user would enter a Base URL and watch nothing happen.
+    """
+    def decorator(fn):
+        def wrapper():
+            # Hash the identity: the custom provider's identity includes its API
+            # key, and a cache key would otherwise hold it in plaintext for the
+            # process lifetime.
+            key = (fn.__name__, hashlib.sha256(repr(identity()).encode()).hexdigest())
+            now = time.monotonic()
+            cached = _probe_cache.get(key)
+            if cached and now - cached[0] < _PROBE_TTL_SECONDS:
+                return cached[1]
+            value = fn()
+            _probe_cache[key] = (now, value)
+            return value
+        wrapper.__name__ = fn.__name__
+        wrapper.__doc__ = fn.__doc__
+        wrapper.cache_clear = lambda: [
+            _probe_cache.pop(k) for k in list(_probe_cache) if k[0] == fn.__name__
+        ]
+        return wrapper
+    return decorator
 
 
 def _get_ollama_base_url() -> Optional[str]:
@@ -190,6 +178,7 @@ def _get_ollama_base_url() -> Optional[str]:
     return OLLAMA_BASE_URL.rstrip("/") + "/"
 
 
+@_ttl_cached(lambda: OLLAMA_BASE_URL)
 def fetch_ollama_models() -> List[str]:
     """
     Retrieve the list of locally available Ollama models by querying the Ollama HTTP API.
@@ -200,7 +189,7 @@ def fetch_ollama_models() -> List[str]:
         return []
 
     try:
-        resp = requests.get(urljoin(base_url, "api/tags"), timeout=3)
+        resp = requests.get(urljoin(base_url, "api/tags"), timeout=_PROBE_TIMEOUT)
         resp.raise_for_status()
         models = resp.json().get("models", [])
         available = []
@@ -220,6 +209,7 @@ def fetch_ollama_models() -> List[str]:
 
 
 # Added Support for llama.cpp models since they use OpenAI-compatible API
+@_ttl_cached(lambda: LLAMA_CPP_BASE_URL)
 def fetch_llama_cpp_models() -> List[str]:
     """
     Retrieve available models from an OpenAI-compatible llama.cpp server.
@@ -230,7 +220,7 @@ def fetch_llama_cpp_models() -> List[str]:
 
     base = LLAMA_CPP_BASE_URL.rstrip("/")
     try:
-        resp = requests.get(f"{base}/v1/models", timeout=3)
+        resp = requests.get(f"{base}/v1/models", timeout=_PROBE_TIMEOUT)
         resp.raise_for_status()
         data = resp.json().get("data", [])
         return [m["id"] for m in data if "id" in m]
@@ -238,6 +228,7 @@ def fetch_llama_cpp_models() -> List[str]:
         return []
 
 
+@_ttl_cached(lambda: (config.CUSTOM_API_BASE_URL, config.CUSTOM_API_KEY))
 def fetch_custom_api_models() -> List[str]:
     """Retrieve models from any OpenAI-compatible API endpoint."""
     if not config.CUSTOM_API_BASE_URL:
@@ -246,7 +237,7 @@ def fetch_custom_api_models() -> List[str]:
     if not base.endswith("/v1"):
         base += "/v1"
     try:
-        resp = requests.get(f"{base}/models", timeout=3)
+        resp = requests.get(f"{base}/models", timeout=_PROBE_TIMEOUT)
         resp.raise_for_status()
         return [m["id"] for m in resp.json().get("data", []) if "id" in m]
     except (requests.RequestException, ValueError, KeyError):
@@ -257,49 +248,13 @@ def _is_set(v: Optional[str]) -> bool:
     return bool(v and str(v).strip() and "your_" not in str(v))
 
 
-# Changed it so the GUI only loaded available models
 def get_model_choices() -> List[str]:
+    """Every chat model the user can actually reach right now.
+
+    Cloud models come from the live registry, gated on the provider's key being
+    present. Local models are discovered the way they always have been.
     """
-    Combine configured cloud models with locally available Ollama models.
-    Cloud models are shown only if required API keys are present.
-    """
-    gated_base_models: List[str] = []
-
-    openai_ok = _is_set(OPENAI_API_KEY)
-    anthropic_ok = _is_set(ANTHROPIC_API_KEY)
-    google_ok = _is_set(GOOGLE_API_KEY)
-    openrouter_ok = _is_set(OPENROUTER_API_KEY) and _is_set(OPENROUTER_BASE_URL)
-
-    for k, cfg in _llm_config_map.items():
-        cls = cfg.get("class")
-        ctor = cfg.get("constructor_params", {}) or {}
-
-        # OpenRouter models (ChatOpenAI with base_url set to OpenRouter)
-        if cls is ChatOpenAI and (ctor.get("base_url") == OPENROUTER_BASE_URL or "openrouter" in k):
-            if openrouter_ok:
-                gated_base_models.append(k)
-            continue
-
-        # Direct OpenAI models
-        if cls is ChatOpenAI:
-            if openai_ok:
-                gated_base_models.append(k)
-            continue
-
-        # Anthropic
-        if cls is ChatAnthropic:
-            if anthropic_ok:
-                gated_base_models.append(k)
-            continue
-
-        # Google Gemini
-        if cls is ChatGoogleGenerativeAI:
-            if google_ok:
-                gated_base_models.append(k)
-            continue
-
-        # Anything else: keep
-        gated_base_models.append(k)
+    gated_base_models = [entry["key"] for entry in _registry_entries()]
 
     # Local Models
     dynamic_models = []
@@ -331,17 +286,18 @@ def get_model_choices() -> List[str]:
     return gated_base_models + ordered_dynamic
 
 
-
-
 def resolve_model_config(model_choice: str):
     """
     Resolve a model choice (case-insensitive) to the corresponding configuration.
     Supports both the predefined remote models and any locally installed Ollama models.
     """
     model_choice_lower = _normalize_model_name(model_choice)
-    cfg = _llm_config_map.get(model_choice_lower)
-    if cfg:
-        return cfg
+
+    for entry in _registry_entries():
+        if _normalize_model_name(entry["key"]) == model_choice_lower:
+            cfg = _provider_constructor(entry["provider"], entry["model_name"])
+            if cfg:
+                return cfg
 
     # llama.cpp (OpenAI-compatible)
     for llama_model in fetch_llama_cpp_models():
@@ -353,6 +309,7 @@ def resolve_model_config(model_choice: str):
                 "class": ChatOpenAI,
                 "constructor_params": {
                     "model_name": llama_model,
+                    "temperature": 0,
                     "base_url": base,
                     "api_key": OPENAI_API_KEY or "sk-local",
                     "streaming": False,
@@ -374,6 +331,7 @@ def resolve_model_config(model_choice: str):
                 "class": ChatOpenAI,
                 "constructor_params": {
                     "model_name": custom_model,
+                    "temperature": 0,
                     "base_url": base,
                     "api_key": config.CUSTOM_API_KEY or "sk-custom",
                     "streaming": False,
@@ -384,7 +342,15 @@ def resolve_model_config(model_choice: str):
         if _normalize_model_name(ollama_model) == model_choice_lower:
             return {
                 "class": ChatOllama,
-                "constructor_params": {"model": ollama_model, "base_url": OLLAMA_BASE_URL},
+                "constructor_params": {
+                    "model": ollama_model,
+                    "temperature": 0,
+                    "base_url": OLLAMA_BASE_URL,
+                    # Without this, Ollama's own default window applies and the
+                    # tail of every investigation is dropped before the model
+                    # ever sees it, however large the model's real context is.
+                    "num_ctx": config.OLLAMA_NUM_CTX,
+                },
             }
 
     return None
@@ -396,23 +362,15 @@ def get_model_display_names(model_keys: List[str]) -> dict:
     llama_cpp_set = set(fetch_llama_cpp_models())
     custom_set = set(fetch_custom_api_models())
 
+    registry_providers = {
+        _normalize_model_name(e["key"]): e["provider"] for e in _registry_entries()
+    }
+
     display = {}
     for key in model_keys:
-        cfg = _llm_config_map.get(_normalize_model_name(key))
-        if cfg:
-            cls = cfg.get("class")
-            ctor = cfg.get("constructor_params", {}) or {}
-            base_url = str(ctor.get("base_url", "")).lower()
-            if "openrouter" in base_url or "openrouter" in key.lower():
-                prefix = "openrouter"
-            elif cls is ChatAnthropic:
-                prefix = "anthropic"
-            elif cls is ChatGoogleGenerativeAI:
-                prefix = "google"
-            elif cls is ChatOpenAI:
-                prefix = "openai"
-            else:
-                prefix = "other"
+        provider = registry_providers.get(_normalize_model_name(key))
+        if provider:
+            prefix = provider
         elif key in ollama_set:
             prefix = "ollama"
         elif key in llama_cpp_set:

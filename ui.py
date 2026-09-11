@@ -1,7 +1,9 @@
 
 import base64
 import json
+import re
 import streamlit as st
+import model_registry
 from datetime import datetime
 from pathlib import Path
 from scrape import scrape_multiple
@@ -18,7 +20,6 @@ from config import (
     ANTHROPIC_API_KEY,
     GOOGLE_API_KEY,
     OPENROUTER_API_KEY,
-    OPENROUTER_BASE_URL,
     OLLAMA_BASE_URL,
     LLAMA_CPP_BASE_URL,
 )
@@ -42,6 +43,12 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
         hints.insert(2, "- Keep `OPENROUTER_BASE_URL` as `https://openrouter.ai/api/v1` unless you intentionally use a custom gateway.")
     elif "openai" in lower_msg or "gpt" in lower_msg:
         hints.insert(0, "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.")
+    elif any(t in lower_msg for t in ("context length", "context_length", "too many tokens",
+                                      "maximum context", "reduce the length")):
+        hints.insert(0, "- The investigation exceeded the model's context window. "
+                        "Lower **Content per Page** or **Max Pages to Scrape** in the sidebar, "
+                        "or pick a model with a larger window.")
+        hints.insert(1, "- On Ollama, raise `OLLAMA_NUM_CTX` (see TROUBLESHOOTING.md).")
     elif "google" in lower_msg or "gemini" in lower_msg:
         hints.insert(0, "- Google Gemini models need `GOOGLE_API_KEY` or Application Default Credentials.")
 
@@ -52,6 +59,17 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
             "\n".join(hints),
         )
     )
+    st.stop()
+
+
+def _render_no_results(headline: str, hints: list) -> None:
+    """Stop the pipeline and say plainly that nothing was found.
+
+    Robin used to fall through to scraping and summarizing whatever links it
+    happened to hold, which produced confident reports built from search engine
+    navigation pages (issue #146). An empty result is a real answer.
+    """
+    st.warning("🔍 {}\n\n{}".format(headline, "\n".join(hints)))
     st.stop()
 
 
@@ -101,8 +119,9 @@ def cached_search_results(refined_query: str, threads: int):
 
 
 @st.cache_data(ttl=200, show_spinner=False)
-def cached_scrape_multiple(filtered: list, threads: int):
-    return scrape_multiple(filtered, max_workers=threads)
+def cached_scrape_multiple(filtered: list, threads: int, content_chars: int):
+    return scrape_multiple(filtered, max_workers=threads,
+                           max_return_chars=content_chars)
 
 
 # Streamlit page configuration
@@ -155,22 +174,60 @@ _robin_cfg.CUSTOM_API_MODEL = st.session_state["custom_api_model"].strip() or No
 
 model_options = get_model_choices()
 model_display_names = get_model_display_names(model_options)
-default_model_index = (
-    next(
-        (idx for idx, name in enumerate(model_options) if name.lower() == "gpt4o"),
-        0,
-    )
-    if model_options
-    else 0
-)
+
+# Preselect an inexpensive recent model. Match on the tier token rather than a
+# model name: hardcoding one is what left "gpt4o" here long after that id was
+# retired, so the search always missed and silently fell through to index 0.
+# The registry already orders each provider newest-first, so the first token
+# match is the newest cheap model the user can actually reach.
+_CHEAP_TIER_TOKENS = ("nano", "mini", "flash-lite", "flash", "lite", "haiku", "small")
+
+
+def _has_tier_token(name: str, token: str) -> bool:
+    """Match a tier token as a whole segment, not a bare substring.
+
+    "mini" is a substring of "gemini", so a plain `in` test made every Gemini
+    model read as a mini model and the preselection landed wherever the list
+    happened to start.
+    """
+    return re.search(r"(?:^|[-_. /:])" + re.escape(token) + r"(?:$|[-_. /:])",
+                     name.lower()) is not None
+
+
+def _default_model_index(options) -> int:
+    for token in _CHEAP_TIER_TOKENS:
+        for idx, name in enumerate(options):
+            if _has_tier_token(name, token):
+                return idx
+    return 0
+
+
+default_model_index = _default_model_index(model_options) if model_options else 0
 
 if not model_options:
-    st.sidebar.error(
-        "⛔ **No LLM models available.**\n\n"
-        "No API keys or local providers are configured. "
-        "Set at least one in your `.env` file and restart Robin.\n\n"
-        "See **Provider Configuration** below for details."
-    )
+    # Distinguish "nothing configured" from "configured but unreachable". Both
+    # used to render the same message, which sent a user with a perfectly good
+    # key off to check their .env.
+    try:
+        _configured = model_registry.configured_providers()
+    except Exception:
+        _configured = []
+    if _configured:
+        st.sidebar.error(
+            "⛔ **Could not load models for: {}.**\n\n"
+            "The key is set, so this is usually the provider being unreachable: "
+            "no network, an outage, or an expired key. Robin falls back to a "
+            "bundled model list, but it does not carry every provider.\n\n"
+            "Retry once you have a connection, or add a second provider's key. "
+            "See TROUBLESHOOTING.md.".format(", ".join(_configured))
+        )
+    else:
+        st.sidebar.error(
+            "⛔ **No LLM models available.**\n\n"
+            "No API keys or local providers are configured. "
+            "Set at least one in your `.env` file and restart Robin.\n\n"
+            "See **Provider Configuration** below for details."
+        )
     st.stop()
 
 model = st.sidebar.selectbox(
@@ -180,7 +237,7 @@ model = st.sidebar.selectbox(
     index=default_model_index,
     key="model_select",
 )
-if any(name not in {"gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"} for name in model_options):
+if any(model_display_names.get(name, "").startswith("[ollama]") for name in model_options):
     st.sidebar.caption("Locally detected Ollama models are automatically added to this list.")
 
 with st.sidebar.expander("🔌 Custom API Provider"):
@@ -210,6 +267,18 @@ max_results = st.sidebar.slider(
 max_scrape = st.sidebar.slider(
     "Max Pages to Scrape", 3, 20, 10, key="max_scrape_slider",
     help="Cap the number of filtered results that get scraped for content.",
+)
+content_chars = st.sidebar.slider(
+    "Content per Page (characters)", 1000, 20000, 8000, step=1000,
+    key="content_chars_slider",
+    help="How much of each scraped page the model reads. Higher means richer "
+         "reports and more tokens per investigation. Raising this does not slow "
+         "down the Tor scrape.",
+)
+st.sidebar.caption(
+    "~{:,} characters (~{:,} tokens) sent to the model per investigation.".format(
+        content_chars * max_scrape, (content_chars * max_scrape) // 4
+    )
 )
 
 st.sidebar.divider()
@@ -460,9 +529,14 @@ def _render_chat_panel(inv):
     if followup:
         with st.chat_message("user"):
             st.markdown(followup)
+        # Budget the follow-up against the same amount of evidence the summary
+        # saw. A fixed 12,000 would answer chat questions from a fraction of a
+        # high-budget investigation while the report used all of it.
+        _inv_budget = inv.get("content_chars") and inv.get("max_scrape")
         context = build_followup_context(
             inv.get("query", ""), inv.get("refined", ""),
             inv.get("sources", []), inv.get("scraped"), inv.get("summary", ""),
+            char_budget=(inv["content_chars"] * inv["max_scrape"]) if _inv_budget else 12000,
         )
         history = _followup_history_messages(st.session_state.get("chat_history", []))
         with st.chat_message("assistant"):
@@ -530,9 +604,22 @@ if _do_run:
     # Stage 3 - Search dark web
     with status_slot.container():
         with st.spinner("🔍 Searching dark web..."):
-            st.session_state.results = cached_search_results(
-                st.session_state.refined, threads
-            )
+            try:
+                st.session_state.results = cached_search_results(
+                    st.session_state.refined, threads
+                )
+            except Exception as e:
+                _render_pipeline_error("search the dark web", e)
+    if not st.session_state.results:
+        _render_no_results(
+            "No dark web results came back for this query.",
+            [
+                "- Try broader or differently worded search terms.",
+                "- Run **Check Search Engines** in the sidebar; onion engines have irregular uptime.",
+                "- Confirm Tor is running and reachable on `socks5h://127.0.0.1:9050`.",
+            ],
+        )
+
     # Cap results before LLM filter step
     if len(st.session_state.results) > max_results:
         st.session_state.results = st.session_state.results[:max_results]
@@ -544,9 +631,25 @@ if _do_run:
     # Stage 4 - Filter results
     with status_slot.container():
         with st.spinner("🗂️ Filtering results..."):
-            st.session_state.filtered = filter_results(
-                llm, st.session_state.refined, st.session_state.results
-            )
+            try:
+                st.session_state.filtered = filter_results(
+                    llm, st.session_state.refined, st.session_state.results,
+                    limit=max_scrape,
+                )
+            except Exception as e:
+                _render_pipeline_error("filter the search results", e)
+    if not st.session_state.filtered:
+        _render_no_results(
+            "Found {} raw links, but none of them matched this query.".format(
+                len(st.session_state.results)
+            ),
+            [
+                "- The engines that responded returned nothing relevant to these terms.",
+                "- Try broader terms, or a different phrasing of the same question.",
+                "- Robin stops here on purpose rather than summarizing unrelated pages.",
+            ],
+        )
+
     # Cap filtered results before scraping
     if len(st.session_state.filtered) > max_scrape:
         st.session_state.filtered = st.session_state.filtered[:max_scrape]
@@ -558,9 +661,12 @@ if _do_run:
     # Stage 5 - Scrape content
     with status_slot.container():
         with st.spinner("📜 Scraping content..."):
-            st.session_state.scraped = cached_scrape_multiple(
-                st.session_state.filtered, threads
-            )
+            try:
+                st.session_state.scraped = cached_scrape_multiple(
+                    st.session_state.filtered, threads, content_chars
+                )
+            except Exception as e:
+                _render_pipeline_error("scrape the selected pages", e)
 
     # Stage 6 - Summarize (streaming)
     st.session_state.streamed_summary = ""
@@ -577,10 +683,13 @@ if _do_run:
         with st.spinner("✍️ Generating summary..."):
             stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
             llm.callbacks = [stream_handler]
-            summary_text = generate_summary(
-                llm, query, st.session_state.scraped,
-                preset=selected_preset, custom_instructions=custom_instructions,
-            )
+            try:
+                summary_text = generate_summary(
+                    llm, query, st.session_state.scraped,
+                    preset=selected_preset, custom_instructions=custom_instructions,
+                )
+            except Exception as e:
+                _render_pipeline_error("generate the investigation summary", e)
 
     # Reasoning models (OpenAI o1, DeepSeek R1, etc.) stream their chain-of-thought as
     # reasoning_content, so on_llm_new_token never fires with answer tokens and the
@@ -641,6 +750,8 @@ if _do_run:
         "scraped": st.session_state.scraped,
         "summary": st.session_state.streamed_summary,
         "results_count": len(st.session_state.results),
+        "content_chars": content_chars,
+        "max_scrape": max_scrape,
     }
     st.session_state["chat_history"] = []
 

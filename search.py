@@ -1,7 +1,6 @@
 import requests
 import random, re
-import json
-import os
+from urllib.parse import urlparse, parse_qs, parse_qsl, urlencode, unquote
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
@@ -62,34 +61,138 @@ def get_tor_session():
     }
     return session
 
+ONION_URL_RE = re.compile(r'https?://[a-z0-9.-]+\.onion[^\s"\'<>]*', re.IGNORECASE)
+
+# Hosts of the engines Robin itself queries. A result pointing at one of these
+# is another engine's result page, not a discovered target.
+#
+# This used to be a set of PATHS, which was wrong: /index.php and /search.php
+# are the default landing paths for phpBB, SMF and most PHP-based onion forums
+# and markets, so matching on path discarded exactly the sites Robin exists to
+# find. Matching on host is both precise and self-maintaining, since it derives
+# from SEARCH_ENGINES above.
+_ENGINE_HOSTS = {
+    (urlparse(e["url"]).hostname or "").lower() for e in SEARCH_ENGINES
+}
+
+
+def _extract_target_onion(href, engine_host):
+    """Return the external .onion URL an anchor points at, or None.
+
+    Two things make this less trivial than a regex match:
+
+    * Engines wrap results in their own redirect endpoint
+      (``/search/redirect?redirect_url=http://target.onion``), so the raw href
+      is on the engine's host even though it leads somewhere else.
+    * Engine pages are full of navigation, category, FAQ and footer links on
+      the engine's own host. Those are not search results and must not reach
+      the scraper — see issue #146, where reports were being written about a
+      search engine's own menu.
+    """
+    if not href:
+        return None
+
+    candidates = ONION_URL_RE.findall(href) or ONION_URL_RE.findall(unquote(href))
+    if not candidates:
+        return None
+
+    for url in candidates:
+        if (urlparse(url).hostname or "").lower() != engine_host:
+            return url
+
+    # Everything matched points back at the engine: unwrap a redirect target
+    # from the query string if there is one, otherwise it is internal navigation.
+    for values in parse_qs(urlparse(candidates[0]).query).values():
+        for value in values:
+            for nested in ONION_URL_RE.findall(unquote(value)):
+                if (urlparse(nested).hostname or "").lower() != engine_host:
+                    return nested
+    return None
+
+
+MAX_TITLE_CHARS = 200
+
+
+def _is_useful_title(title):
+    """A title is usable if it has some length and any alphanumeric character.
+
+    `isalnum` is Unicode-aware on purpose. An ASCII-only test silently discarded
+    every Cyrillic, CJK and Arabic title, which on a dark web OSINT tool means
+    discarding a large share of the highest-value results.
+
+    There is no upper bound here. Some engines put the whole result snippet
+    inside the anchor text, and a long title is a reason to trim, never a reason
+    to throw the result away.
+    """
+    return bool(title) and len(title) >= 4 and any(ch.isalnum() for ch in title)
+
+
+def _trim_title(title):
+    return title if len(title) <= MAX_TITLE_CHARS else title[:MAX_TITLE_CHARS].rstrip() + "..."
+
+
 def fetch_search_results(endpoint, query):
     url = endpoint.format(query=query)
     headers = {"User-Agent": random.choice(USER_AGENTS)}
     session = get_tor_session()
-    
+
     try:
         response = session.get(url, headers=headers, timeout=40)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, "html.parser")
-            links = []
-            # Generic parsing for standard search engine layouts
-            for a in soup.find_all('a'):
-                try:
-                    href = a['href']
-                    title = a.get_text(strip=True)
-                    # Extract onion links
-                    link = re.findall(r'https?:\/\/[a-z0-9\.]+\.onion.*', href)
-                    if len(link) != 0:
-                        # Basic filtering to avoid self-referential links
-                        if "search" not in link[0] and len(title) > 3:
-                            links.append({"title": title, "link": link[0]})
-                except:
-                    continue
-            return links
-        else:
+        if response.status_code != 200:
             return []
-    except:
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        engine_host = (urlparse(url).hostname or "").lower()
+        links = []
+
+        for a in soup.find_all("a"):
+            try:
+                target = _extract_target_onion(a.get("href"), engine_host)
+                if not target:
+                    continue
+                # Drop results that point at another engine Robin already queries.
+                if (urlparse(target).hostname or "").lower() in _ENGINE_HOSTS:
+                    continue
+                title = a.get_text(strip=True)
+                if not _is_useful_title(title):
+                    continue
+                links.append({"title": _trim_title(title), "link": target})
+            except Exception:
+                continue
+        return links
+    except Exception:
         return []
+
+
+# Parameters that identify a referrer or campaign rather than the content.
+_TRACKING_PARAMS = {
+    "utm", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "ref", "referrer", "fbclid", "gclid", "yclid", "msclkid", "src",
+}
+
+
+def _dedup_key(link):
+    """Identity of a page for deduplication.
+
+    The query string is part of that identity. Dropping it entirely collapsed
+    /viewtopic.php?t=1, ?t=2 and ?t=3 into a single result, and query-addressed
+    URLs are the dominant shape on onion forums and markets, so a board with a
+    dozen matching threads reported one. Only tracking parameters are stripped,
+    which is all the deduplication was ever trying to achieve.
+    """
+    parsed = urlparse(link or "")
+    kept = [
+        (k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+        if k.lower() not in _TRACKING_PARAMS
+    ]
+    query = urlencode(sorted(kept), doseq=True)
+    return "{}://{}{}{}".format(
+        parsed.scheme,
+        unquote(parsed.hostname or "").lower(),
+        unquote(parsed.path).rstrip("/"),
+        "?" + query if query else "",
+    )
+
 
 def get_search_results(refined_query, max_workers=5):
     results = []
@@ -100,15 +203,18 @@ def get_search_results(refined_query, max_workers=5):
             result_urls = future.result()
             results.extend(result_urls)
 
-    # Deduplicate results
+    # Deduplicate on scheme + host + path so that tracker-tagged and
+    # percent-encoded variants of the same page collapse into one result.
     seen_links = set()
     unique_results = []
     for res in results:
-        link = res.get("link")
-        # Remove trailing slashes for better deduplication
-        clean_link = link.rstrip('/')
+        link = res.get("link") or ""
+        try:
+            clean_link = _dedup_key(link)
+        except Exception:
+            clean_link = link.rstrip("/")
         if clean_link not in seen_links:
             seen_links.add(clean_link)
             unique_results.append(res)
-            
+
     return unique_results

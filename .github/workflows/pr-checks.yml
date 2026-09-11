@@ -1,0 +1,108 @@
+name: PR Checks
+
+# Runs before anything reaches main. Pushing to main publishes a GitHub release
+# and a :latest Docker image automatically, so this is the only gate between a
+# change and users pulling it.
+on:
+  # Any branch except main, so a plain `git push` of a feature branch is checked
+  # without needing a PR open yet.
+  push:
+    branches-ignore: [ main ]
+  # And again on the PR itself, which is what a branch protection rule can
+  # require before the merge button unlocks.
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# A branch push and its PR would otherwise duplicate the run.
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyflakes
+
+      - name: Compile every module
+        run: python -m compileall -q .
+
+      - name: Lint for undefined names and unused imports
+        run: python -m pyflakes *.py
+
+      - name: Import every module
+        # Catches circular imports, bad top-level code, and missing
+        # dependencies that compileall cannot see. ui.py is excluded because
+        # importing it executes the Streamlit script.
+        run: |
+          for module in config llm llm_utils model_registry scrape search health; do
+            echo "importing $module"
+            python -c "import $module"
+          done
+
+      - name: Validate the bundled model seed
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          seed = json.loads(pathlib.Path("models.json").read_text())
+          providers = seed["providers"]
+          assert isinstance(providers, dict) and providers, "seed has no providers"
+          for name, models in providers.items():
+              assert isinstance(models, list) and models, f"{name} seed list is empty"
+              assert all(isinstance(m, str) and m for m in models), f"{name} has a bad entry"
+          print(f"seed OK: {len(providers)} providers, "
+                f"{sum(len(v) for v in providers.values())} models")
+          PY
+
+      - name: Registry works with no API keys configured
+        # The failure mode this guards: a user with one key, or none, must still
+        # get a usable app rather than a crash.
+        env:
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          GOOGLE_API_KEY: ""
+          MISTRAL_API_KEY: ""
+          OPENROUTER_API_KEY: ""
+        run: |
+          python - <<'PY'
+          import model_registry, llm_utils
+          assert model_registry.configured_providers() == [], "unexpected provider configured in CI"
+          assert model_registry.get_entries() == [], "entries returned without any key"
+          assert llm_utils.get_model_choices() == [], "picker not empty without any key"
+          print("no-key path OK: empty picker, no crash")
+          PY
+
+      - name: Search parser rejects engine-internal links
+        run: |
+          python - <<'PY'
+          from urllib.parse import urlparse
+          import search
+          engine = "amnesia7u5odx5xbwtpnqk3edybgud5bmiagu75bnqx2crntw5kry7ad.onion"
+          # Engine navigation must never become a result.
+          assert search._extract_target_onion(f"http://{engine}/categories", engine) is None
+          # A redirect wrapper must unwrap to the external target.
+          assert search._extract_target_onion(
+              f"http://{engine}/search/redirect?redirect_url=http://target1234.onion/x",
+              engine) == "http://target1234.onion/x"
+          # Non-Latin titles must survive.
+          assert search._is_useful_title("Утечка базы данных")
+          # Query strings must not collapse distinct pages.
+          keys = {search._dedup_key(f"http://f.onion/viewtopic.php?t={i}") for i in (1, 2, 3)}
+          assert len(keys) == 3, keys
+          print("search parser OK")
+          PY

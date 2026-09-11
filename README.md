@@ -7,7 +7,7 @@
    <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
    <p>Robin is an AI-powered tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries, filter search results from dark web search engines, and provide an investigation summary.</p>
-   <a href="#installation">Installation</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
+   <a href="#installation">Installation</a> &bull; <a href="#troubleshooting">Troubleshooting</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
 </div>
 
 ![Demo](.github/assets/screen-ui.png)
@@ -21,11 +21,14 @@
 ## Features
 
 - ⚙️ **Modular Architecture** – Clean separation between search, scrape, and LLM workflows.
-- 🤖 **Multi-Model Support** – Easily switch between OpenAI, Claude, Gemini, Ollama, or any OpenAI-compatible API (LM Studio, llama.cpp, Groq, etc.).
+- 🤖 **Multi-Model Support** – OpenAI, Claude, Gemini, Mistral, OpenRouter, Ollama, or any OpenAI-compatible API (LM Studio, llama.cpp, Groq, etc.).
+- 🔄 **Live Model List** – Models are discovered from each provider at startup, so new releases appear on their own and retired ones disappear. No hardcoded list to go stale.
+- 🎚️ **Tunable Depth** – Sidebar controls for how many results to filter, how many pages to scrape, and how much of each page the model reads, with the token cost shown before you run.
 - 🌐 **Web UI** – Streamlit-based interface for interactive investigations.
 - 💬 **Conversational Follow-ups** – Ask grounded follow-up questions about an investigation without re-running the search — answered from that investigation's own data.
 - 🔀 **One-Click Pivots** – Suggested follow-up queries surfaced from the findings; click one to launch a fresh investigation.
 - 🐳 **Docker-Ready** – Recommended Docker deployment for clean, isolated usage.
+- 🔍 **Honest Results** – When nothing relevant is found, Robin says so instead of summarizing whatever it happened to scrape.
 - 📝 **Custom Reporting** – Save investigation output to file for reporting or further analysis.
 - 🧩 **Extensible** – Easy to plug in new search engines, models, or output formats.
 
@@ -43,9 +46,14 @@
 > The tool needs Tor to do the searches. You can install Tor using `apt install tor` on Linux/Windows(WSL) or `brew install tor` on Mac. Once installed, confirm if Tor is running in the background.
 
 > [!TIP]
-> You can provide your LLM of choice API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
+> Provide your API key either in a `.env` file (copy [`.env.example`](.env.example)) or as environment variables. One key is enough: Robin lists models for whichever providers it finds. Supported keys are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY` and `OPENROUTER_API_KEY`.
 >
-> For Ollama, provide `http://host.docker.internal:11434` as `OLLAMA_BASE_URL` in your env if running using docker method or `http://127.0.0.1:11434` for other methods. You might need to serve Ollama on 0.0.0.0 depending on your OS. You can do by running `OLLAMA_HOST=0.0.0.0 ollama serve &` in your terminal.
+> For Ollama, nothing goes in your `.env`. Robin defaults to `http://host.docker.internal:11434`, which is what the recommended Docker install needs. Two things are still on you:
+>
+> 1. Run the container with `--add-host=host.docker.internal:host-gateway` (the README command already does).
+> 2. Make Ollama listen on all interfaces, since it binds to `127.0.0.1` by default and a container cannot reach that. If you start it yourself, `OLLAMA_HOST=0.0.0.0 ollama serve &`. If it runs under systemd, `sudo systemctl edit ollama.service`, add `[Service]` and `Environment="OLLAMA_HOST=0.0.0.0"`, then `sudo systemctl daemon-reload && sudo systemctl restart ollama`.
+>
+> Running Robin directly with Python instead of Docker? Add `OLLAMA_BASE_URL=http://127.0.0.1:11434` to override the default. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if it still doesn't appear.
 >
 > For any other OpenAI-compatible provider (LM Studio, llama.cpp, Groq, etc.), use the **🔌 Custom API Provider** expander in the sidebar — no `.env` changes required. Enter the base URL, an optional API key, and optionally a model name if the provider doesn't expose `/v1/models` for auto-discovery.
 
@@ -92,21 +100,19 @@ streamlit run ui.py
 
 ---
 
+## Troubleshooting
+
+Empty model dropdown, Ollama not showing up, Tor `resolve failed` errors, 401s,
+or "no results found"? See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** before
+opening an issue.
+
+---
+
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request if you have major feature updates.
-
-- Fork the repository
-- Create your feature branch (git checkout -b feature/amazing-feature)
-- Commit your changes (git commit -m 'Add some amazing feature')
-- Push to the branch (git push origin feature/amazing-feature)
-- Open a Pull Request
-
-Open an Issue for any of these situations:
-- If you spot a bug or bad code
-- If you have a feature request idea
-- If you have questions or doubts about usage
-- If you have minor code changes
+Contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the
+pull request flow, the automated checks that run on every push, and what kinds
+of change fit the tool.
 
 ---
 
@@ -116,9 +122,3 @@ Open an Issue for any of these situations:
 - Tools inspiration from my [OSINT Tools for the Dark Web](https://github.com/apurvsinghgautam/dark-web-osint-tools) repository.
 - LLM Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
 - Logo Design by my friend [Tanishq Rupaal](https://github.com/Tanq16/)
-
-
-
-
-
-

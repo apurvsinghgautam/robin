@@ -47,7 +47,7 @@ def get_llm(model_choice):
 
 def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> None:
     """Raise a clear error if the user selects a hosted model without a key."""
-    from config import CUSTOM_API_BASE_URL, CUSTOM_API_KEY
+    from config import CUSTOM_API_BASE_URL
 
     def _require(key_value, env_var, provider_name):
         if key_value:
@@ -61,6 +61,9 @@ def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> Non
 
     if "ChatAnthropic" in class_name:
         _require(ANTHROPIC_API_KEY, "ANTHROPIC_API_KEY", "Anthropic")
+    elif "ChatMistralAI" in class_name:
+        from config import MISTRAL_API_KEY
+        _require(MISTRAL_API_KEY, "MISTRAL_API_KEY", "Mistral")
     elif "ChatGoogleGenerativeAI" in class_name:
         _require(GOOGLE_API_KEY, "GOOGLE_API_KEY", "Google Gemini")
     elif "ChatOpenAI" in class_name:
@@ -77,14 +80,17 @@ def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> Non
 
 def refine_query(llm, user_input):
     system_prompt = """
-    You are a Cybercrime Threat Intelligence Expert. Your task is to refine the provided user query that needs to be sent to darkweb search engines. 
-    
+    You are a Dark Web Search Query Expert. Your task is to refine the provided user query to get the best results from dark web search engines.
+
     Rules:
-    1. Analyze the user query and think about how it can be improved to use as search engine query
-    2. Refine the user query by adding or removing words so that it returns the best result from dark web search engines
-    3. Don't use any logical operators (AND, OR, etc.)
-    4. Keep the final refined query limited to 5 words or less
-    5. Output just the user query and nothing else
+    1. Preserve the user's subject and intent exactly. Do NOT change the topic of the query: if the user asks about stock market data, keep it about stock market data; if about malware, keep it about malware.
+    2. Add at most one dark-web discovery modifier relevant to the subject (e.g. "leak", "dump", "database", "breach", "forum", "dataset"), and only if it naturally fits the user's topic.
+    3. Do NOT introduce unrelated topics like malware, ransomware, hacking, or CVEs unless the user's query is already about those topics.
+    4. Preserve exact technical identifiers as-is: file hashes, onion addresses, usernames, CVE numbers, cryptocurrency addresses, email addresses.
+    5. Avoid commercial or marketplace phrasing (e.g. "buy", "cheap", "price", "shop", "order").
+    6. Don't use any logical operators (AND, OR, NOT, etc.).
+    7. Keep the final refined query limited to 5 words or less.
+    8. Output just the refined query and nothing else.
 
     INPUT:
     """
@@ -95,19 +101,81 @@ def refine_query(llm, user_input):
     return chain.invoke({"query": user_input})
 
 
-def filter_results(llm, query, results):
+_RANGE_RE = re.compile(r"(?<![\w-])(\d+)\s*[-\u2013]\s*(\d+)(?![\w])")
+_INDEX_RE = re.compile(r"(?<![\w-])(\d+)(?![\w])")
+
+
+def _iter_selected_indices(payload, max_span=100):
+    """Yield the indices a model selected, expanding "10-12" style ranges.
+
+    A bare digit scan read "1-5" as the single index 1 and silently dropped the
+    other four. Ranges are expanded in order; an implausibly wide one is treated
+    as two separate numbers rather than flooding the selection.
+    """
+    consumed = []
+    for match in _RANGE_RE.finditer(payload):
+        start, end = int(match.group(1)), int(match.group(2))
+        if 0 < end - start < max_span:
+            consumed.append((match.span(), list(range(start, end + 1))))
+
+    out, covered = [], set()
+    for (span, values) in consumed:
+        covered.update(range(*span))
+    expanded = {span[0]: values for span, values in consumed}
+    for match in _INDEX_RE.finditer(payload):
+        if match.start() in covered and match.start() not in expanded:
+            continue
+        if match.start() in expanded:
+            out.extend(expanded[match.start()])
+        else:
+            out.append(int(match.group(1)))
+    return out
+
+
+def _strip_leading_label(reply):
+    """Drop a model's prose label so its numbers are not read as selections.
+
+    Models answer "Top 5 results, ranked by relevance: 3, 9, 12". Taking the
+    text after the last colon handles that, plus "Selected indices:\\n1, 4, 9"
+    and JSON like {"indices": [2, 5, 9]}. Only applied when digits actually
+    follow the colon, so "1, 2, 3: my picks" is left alone.
+    """
+    text = (reply or "").strip()
+    head, sep, tail = text.rpartition(":")
+    if sep and re.search(r"\d", tail):
+        return tail
+    return text
+
+
+def filter_results(llm, query, results, limit=20):
+    """Pick the results worth scraping, most relevant first.
+
+    `limit` is the caller's real budget, not a fixed 20. The UI throws away
+    anything past its "Max Pages to Scrape" slider, so asking the model for 20
+    when the user set 5 made it rank fifteen results nobody would ever read and
+    left a hidden third cap between two visible sliders.
+    """
     if not results:
         return []
 
+    limit = max(1, int(limit))
+
     system_prompt = """
-    You are a Cybercrime Threat Intelligence Expert. You are given a dark web search query and a list of search results in the form of index, link and title. 
-    Your task is select the Top 20 relevant results that best match the search query for user to investigate more.
-    Rule:
-    1. Output ONLY atmost top 20 indices (comma-separated list) no more than that that best match the input query
+    You are a Dark Web Search Result Analyst. You are given a user search query and a list of dark web search results (index, link, title).
+    Your task is to select up to {limit} results that are most relevant to the user's search query topic.
+    Rules:
+    1. Select results based on how well they match the topic of the search query, not on how "cyber-crime-like" they look. If the query is about financial data or stock markets, prefer results about financial databases, data leaks or market data, NOT generic hacking or malware sites.
+    2. Output ONLY at most the top {limit} indices (comma-separated list) that best match the input query, no more than {limit}.
+    3. Do not repeat indices. Each index must appear at most once in your output.
+    4. If none of the results are relevant to the query, output nothing at all. An empty answer is correct and expected when the search returned nothing on topic. Never pad the list with results you do not believe match.
 
     Search Query: {query}
     Search Results:
     """
+
+    # Substitute the budget before the template is built, so ChatPromptTemplate
+    # still sees only {query} as a variable.
+    system_prompt = system_prompt.replace("{limit}", str(limit))
 
     final_str = _generate_final_string(results)
 
@@ -119,20 +187,29 @@ def filter_results(llm, query, results):
         result_indices = chain.invoke({"query": query, "results": final_str})
     except openai.RateLimitError as e:
         print(
-            f"Rate limit error: {e} \n Truncating to Web titles only with 30 characters"
+            f"Rate limit error: {e} \n Truncating to Web titles only with {TRUNCATED_TITLE_CHARS} characters"
         )
         final_str = _generate_final_string(results, truncate=True)
-        result_indices = chain.invoke({"query": query, "results": final_str})
-
-    # Select top_k results using original (non-truncated) results
-    parsed_indices = []
-    for match in re.findall(r"\d+", result_indices):
         try:
-            idx = int(match)
-            if 1 <= idx <= len(results):
-                parsed_indices.append(idx)
-        except ValueError:
-            continue
+            result_indices = chain.invoke({"query": query, "results": final_str})
+        except openai.RateLimitError:
+            # A second 429 is the expected case inside one rate-limit window.
+            # Raising from in here would surface as an unhandled error; an empty
+            # selection is handled properly by the caller.
+            logging.warning("Still rate limited after truncating. No results selected.")
+            return []
+
+    # Select top_k results using original (non-truncated) results.
+    #
+    # Strip a leading label before parsing. Models routinely answer "Top 7:
+    # 3, 9, 12" or "Indices: 3, 9", and a bare \d+ scan reads the label's own
+    # number as a selected index. Also require that a digit run is not glued to
+    # a word or a minus sign, so "-4" and "v2" do not become selections.
+    payload = _strip_leading_label(result_indices)
+    parsed_indices = []
+    for token in _iter_selected_indices(payload):
+        if 1 <= token <= len(results):
+            parsed_indices.append(token)
 
     # Remove duplicates while preserving order
     seen = set()
@@ -141,17 +218,52 @@ def filter_results(llm, query, results):
     ]
 
     if not parsed_indices:
-        logging.warning(
-            "Unable to interpret LLM result selection ('%s'). "
-            "Defaulting to the top %s results.",
-            result_indices,
-            min(len(results), 20),
+        # No blind fallback. When the model selects nothing it is normally
+        # because nothing in the raw list actually matches the query, and
+        # forcing the top 20 through the scraper produced summaries written
+        # from irrelevant pages (issue #146). Reporting zero results is the
+        # honest answer; the caller stops the pipeline and says so.
+        logging.info(
+            "No relevant search results selected for query '%s' "
+            "(model returned: %r). Returning zero results.",
+            query,
+            (result_indices or "").strip()[:200],
         )
-        parsed_indices = list(range(1, min(len(results), 20) + 1))
+        return []
 
-    top_results = [results[i - 1] for i in parsed_indices[:20]]
+    top_results = [results[i - 1] for i in parsed_indices[:limit]]
 
     return top_results
+
+
+# How much of a title survives the rate-limit retry path. The old value of 30
+# characters cut most titles mid-word, which left the filtering model guessing
+# from fragments (issue #17). 120 sits in the range that issue asked for and
+# still cuts the payload enough for a retry to get under the limit.
+TRUNCATED_TITLE_CHARS = 120
+
+# Characters kept when sanitizing a scraped title. Braces are deliberately
+# excluded: dark web listings are full of them and they break LangChain prompt
+# templates. Everything else here is ordinary punctuation that carries meaning,
+# where the old alphanumeric-only scrub turned "ACME Corp: 400GB (leaked)" into
+# "ACME Corp  400GB  leaked ".
+# Punctuation worth keeping. Braces are excluded on purpose: dark web listings
+# are full of them and they break LangChain prompt templates.
+_TITLE_PUNCT = set("-.,:;/_()'\"&!?#@+ ")
+
+
+def _sanitize_title(title: str) -> str:
+    """Strip control characters and braces, keep letters in any script.
+
+    An ASCII allowlist blanked every Cyrillic, CJK and Arabic title, and the
+    caller's guard is an AND, so the result survived as a bare hostname with no
+    title for the ranker to judge. isalnum is Unicode-aware.
+    """
+    cleaned = "".join(
+        ch if (ch.isalnum() or ch in _TITLE_PUNCT) else " "
+        for ch in (title or "")
+    )
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def _generate_final_string(results, truncate=False):
@@ -160,8 +272,7 @@ def _generate_final_string(results, truncate=False):
     """
 
     if truncate:
-        # Use only the first 35 characters of the title
-        max_title_length = 30
+        max_title_length = TRUNCATED_TITLE_CHARS
         # Do not use link at all
         max_link_length = 0
 
@@ -169,7 +280,7 @@ def _generate_final_string(results, truncate=False):
     for i, res in enumerate(results):
         # Truncate link at .onion for display
         truncated_link = re.sub(r"(?<=\.onion).*", "", res["link"])
-        title = re.sub(r"[^0-9a-zA-Z\-\.]", " ", res["title"])
+        title = _sanitize_title(res["title"])
         if truncated_link == "" and title == "":
             continue
 
@@ -348,7 +459,7 @@ PRESET_PROMPTS = {
 
 def generate_summary(llm, query, content, preset="threat_intel", custom_instructions=""):
     system_prompt = PRESET_PROMPTS.get(preset, PRESET_PROMPTS["threat_intel"])
-    invoke_vars = {"query": query, "content": content}
+    invoke_vars = {"query": query, "content": _flatten_scraped(content)}
     if custom_instructions and custom_instructions.strip():
         # Append as a template placeholder filled by an invoke value, so literal
         # braces the user typed in Custom Instructions aren't misread as
@@ -387,6 +498,28 @@ INVESTIGATION CONTEXT:
 """
 
 
+def _flatten_scraped(scraped):
+    """Render the scraper's {url: text} mapping as readable text.
+
+    scrape_multiple returns a dict. Iterating a dict yields its KEYS, so three
+    call sites were handing the model a bare list of onion hostnames and no page
+    content whatsoever: follow-up chat could not answer questions about data it
+    had scraped, pivots were generated from hostnames, and the summary got a raw
+    Python dict repr. Tolerant of the str and list shapes that investigations
+    loaded from disk can still carry.
+    """
+    if not scraped:
+        return ""
+    if isinstance(scraped, str):
+        return scraped
+    if isinstance(scraped, dict):
+        return "\n\n".join(
+            "SOURCE: {}\n{}".format(url, text)
+            for url, text in scraped.items() if text
+        )
+    return "\n\n".join(str(x) for x in scraped)
+
+
 def build_followup_context(query, refined, sources, scraped, summary, char_budget=12000):
     """Assemble the grounding context a follow-up is answered from:
     original + refined query, sources, the generated summary, and a
@@ -401,7 +534,7 @@ def build_followup_context(query, refined, sources, scraped, summary, char_budge
     if summary:
         parts.append("INVESTIGATION SUMMARY:\n" + str(summary))
     if scraped:
-        raw = scraped if isinstance(scraped, str) else "\n\n".join(str(x) for x in scraped)
+        raw = _flatten_scraped(scraped)
         if len(raw) > char_budget:
             raw = raw[:char_budget] + "\n\n[...truncated...]"
         parts.append("RAW SCRAPED CONTENT (may be truncated):\n" + raw)
@@ -453,7 +586,7 @@ def suggest_pivots(llm, query, content, preset="threat_intel", max_pivots=5):
     INVESTIGATION DATA:
     """.replace("{max_pivots}", str(max_pivots))
 
-    raw_content = content if isinstance(content, str) else "\n\n".join(str(x) for x in (content or []))
+    raw_content = _flatten_scraped(content)
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{content}")]
     )
