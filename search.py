@@ -92,6 +92,21 @@ def _extract_target_onion(href, engine_host):
     if not href:
         return None
 
+    parsed = urlparse(href)
+    # A redirect wrapper lives on the engine's own host, or is a relative path
+    # to it, and carries the real target in a query parameter. Read it with
+    # parse_qs, which splits on & and percent-decodes, so the engine's own
+    # trailing parameters cannot leak into the target. A raw regex scan let
+    # them: /redirect?redirect_url=http://t.onion/&search_term=x yielded
+    # http://t.onion/&search_term=x, a path that 404s on the target host and
+    # defeats dedup because it keys differently from the clean URL.
+    if not (parsed.hostname or "") or (parsed.hostname or "").lower() == engine_host:
+        for values in parse_qs(parsed.query).values():
+            for value in values:
+                for nested in ONION_URL_RE.findall(value):
+                    if (urlparse(nested).hostname or "").lower() != engine_host:
+                        return nested
+
     candidates = ONION_URL_RE.findall(href) or ONION_URL_RE.findall(unquote(href))
     if not candidates:
         return None
