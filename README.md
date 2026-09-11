@@ -21,11 +21,14 @@
 ## Features
 
 - ⚙️ **Modular Architecture** – Clean separation between search, scrape, and LLM workflows.
-- 🤖 **Multi-Model Support** – Easily switch between OpenAI, Claude, Gemini, Ollama, or any OpenAI-compatible API (LM Studio, llama.cpp, Groq, etc.).
+- 🤖 **Multi-Model Support** – OpenAI, Claude, Gemini, Mistral, OpenRouter, Ollama, or any OpenAI-compatible API (LM Studio, llama.cpp, Groq, etc.).
+- 🔄 **Live Model List** – Models are discovered from each provider at startup, so new releases appear on their own and retired ones disappear. No hardcoded list to go stale.
+- 🎚️ **Tunable Depth** – Sidebar controls for how many results to filter, how many pages to scrape, and how much of each page the model reads, with the token cost shown before you run.
 - 🌐 **Web UI** – Streamlit-based interface for interactive investigations.
 - 💬 **Conversational Follow-ups** – Ask grounded follow-up questions about an investigation without re-running the search — answered from that investigation's own data.
 - 🔀 **One-Click Pivots** – Suggested follow-up queries surfaced from the findings; click one to launch a fresh investigation.
 - 🐳 **Docker-Ready** – Recommended Docker deployment for clean, isolated usage.
+- 🔍 **Honest Results** – When nothing relevant is found, Robin says so instead of summarizing whatever it happened to scrape.
 - 📝 **Custom Reporting** – Save investigation output to file for reporting or further analysis.
 - 🧩 **Extensible** – Easy to plug in new search engines, models, or output formats.
 
@@ -43,7 +46,7 @@
 > The tool needs Tor to do the searches. You can install Tor using `apt install tor` on Linux/Windows(WSL) or `brew install tor` on Mac. Once installed, confirm if Tor is running in the background.
 
 > [!TIP]
-> You can provide your LLM of choice API key by either creating .env file (refer to sample env file in the repo) or by setting env variables in PATH.
+> Provide your API key either in a `.env` file (copy [`.env.example`](.env.example)) or as environment variables. One key is enough: Robin lists models for whichever providers it finds. Supported keys are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY` and `OPENROUTER_API_KEY`.
 >
 > For Ollama, nothing goes in your `.env`. Robin defaults to `http://host.docker.internal:11434`, which is what the recommended Docker install needs. Two things are still on you:
 >
@@ -107,24 +110,9 @@ opening an issue.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request if you have major feature updates.
-
-- Fork the repository
-- Create your feature branch (git checkout -b feature/amazing-feature)
-- Commit your changes (git commit -m 'Add some amazing feature')
-- Push to the branch (git push origin feature/amazing-feature)
-- Open a Pull Request
-
-Pull requests run automated checks before they can be merged: every module is
-compiled and imported, `pyflakes` must be clean, the bundled model seed is
-validated, and the search parser and no-API-key paths are smoke-tested. Run them
-locally first with `python -m compileall -q . && python -m pyflakes *.py`.
-
-Open an Issue for any of these situations:
-- If you spot a bug or bad code
-- If you have a feature request idea
-- If you have questions or doubts about usage
-- If you have minor code changes
+Contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the
+pull request flow, the automated checks that run on every push, and what kinds
+of change fit the tool.
 
 ---
 
@@ -134,8 +122,3 @@ Open an Issue for any of these situations:
 - Tools inspiration from my [OSINT Tools for the Dark Web](https://github.com/apurvsinghgautam/dark-web-osint-tools) repository.
 - LLM Prompt inspiration from [OSINT-Assistant](https://github.com/AXRoux/OSINT-Assistant) repository.
 - Logo Design by my friend [Tanishq Rupaal](https://github.com/Tanq16/)
-
-
-
-
-
