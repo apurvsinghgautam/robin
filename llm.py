@@ -101,6 +101,21 @@ def refine_query(llm, user_input):
     return chain.invoke({"query": user_input})
 
 
+def _strip_leading_label(reply):
+    """Drop a model's prose label so its numbers are not read as selections.
+
+    Models answer "Top 5 results, ranked by relevance: 3, 9, 12". Taking the
+    text after the last colon handles that, plus "Selected indices:\\n1, 4, 9"
+    and JSON like {"indices": [2, 5, 9]}. Only applied when digits actually
+    follow the colon, so "1, 2, 3: my picks" is left alone.
+    """
+    text = (reply or "").strip()
+    head, sep, tail = text.rpartition(":")
+    if sep and re.search(r"\d", tail):
+        return tail
+    return text
+
+
 def filter_results(llm, query, results, limit=20):
     """Pick the results worth scraping, most relevant first.
 
@@ -144,7 +159,14 @@ def filter_results(llm, query, results, limit=20):
             f"Rate limit error: {e} \n Truncating to Web titles only with {TRUNCATED_TITLE_CHARS} characters"
         )
         final_str = _generate_final_string(results, truncate=True)
-        result_indices = chain.invoke({"query": query, "results": final_str})
+        try:
+            result_indices = chain.invoke({"query": query, "results": final_str})
+        except openai.RateLimitError:
+            # A second 429 is the expected case inside one rate-limit window.
+            # Raising from in here would surface as an unhandled error; an empty
+            # selection is handled properly by the caller.
+            logging.warning("Still rate limited after truncating. No results selected.")
+            return []
 
     # Select top_k results using original (non-truncated) results.
     #
@@ -152,7 +174,7 @@ def filter_results(llm, query, results, limit=20):
     # 3, 9, 12" or "Indices: 3, 9", and a bare \d+ scan reads the label's own
     # number as a selected index. Also require that a digit run is not glued to
     # a word or a minus sign, so "-4" and "v2" do not become selections.
-    payload = re.sub(r"^[^,\n]{0,40}?:", "", result_indices.strip(), count=1)
+    payload = _strip_leading_label(result_indices)
     parsed_indices = []
     for match in re.findall(r"(?<![\w-])(\d+)(?![\w])", payload):
         try:
@@ -198,11 +220,22 @@ TRUNCATED_TITLE_CHARS = 120
 # templates. Everything else here is ordinary punctuation that carries meaning,
 # where the old alphanumeric-only scrub turned "ACME Corp: 400GB (leaked)" into
 # "ACME Corp  400GB  leaked ".
-_TITLE_ALLOWED = re.compile(r"[^0-9a-zA-Z\-\.,:;/_()'\"&!?#@+ ]")
+# Punctuation worth keeping. Braces are excluded on purpose: dark web listings
+# are full of them and they break LangChain prompt templates.
+_TITLE_PUNCT = set("-.,:;/_()'\"&!?#@+ ")
 
 
 def _sanitize_title(title: str) -> str:
-    cleaned = _TITLE_ALLOWED.sub(" ", title or "")
+    """Strip control characters and braces, keep letters in any script.
+
+    An ASCII allowlist blanked every Cyrillic, CJK and Arabic title, and the
+    caller's guard is an AND, so the result survived as a bare hostname with no
+    title for the ranker to judge. isalnum is Unicode-aware.
+    """
+    cleaned = "".join(
+        ch if (ch.isalnum() or ch in _TITLE_PUNCT) else " "
+        for ch in (title or "")
+    )
     return re.sub(r"\s+", " ", cleaned).strip()
 
 

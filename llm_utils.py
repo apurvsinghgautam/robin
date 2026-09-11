@@ -12,6 +12,7 @@ except ImportError:  # pragma: no cover
     ChatMistralAI = None
 import model_registry
 from langchain_core.callbacks.base import BaseCallbackHandler
+import hashlib
 import time
 from config import (
     OLLAMA_BASE_URL,
@@ -130,7 +131,10 @@ def _ttl_cached(identity):
     """
     def decorator(fn):
         def wrapper():
-            key = (fn.__name__, identity())
+            # Hash the identity: the custom provider's identity includes its API
+            # key, and a cache key would otherwise hold it in plaintext for the
+            # process lifetime.
+            key = (fn.__name__, hashlib.sha256(repr(identity()).encode()).hexdigest())
             now = time.monotonic()
             cached = _probe_cache.get(key)
             if cached and now - cached[0] < _PROBE_TTL_SECONDS:
@@ -140,7 +144,9 @@ def _ttl_cached(identity):
             return value
         wrapper.__name__ = fn.__name__
         wrapper.__doc__ = fn.__doc__
-        wrapper.cache_clear = _probe_cache.clear
+        wrapper.cache_clear = lambda: [
+            _probe_cache.pop(k) for k in list(_probe_cache) if k[0] == fn.__name__
+        ]
         return wrapper
     return decorator
 

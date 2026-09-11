@@ -212,7 +212,7 @@ def _fetch_openrouter() -> List[str]:
         if _looks_non_chat(model_id):
             continue
         out.append(model_id)
-    return sorted(out)
+    return sorted(out, key=_version_sort_key)
 
 
 PROVIDERS = {

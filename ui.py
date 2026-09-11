@@ -1,6 +1,7 @@
 
 import base64
 import json
+import re
 import streamlit as st
 from datetime import datetime
 from pathlib import Path
@@ -42,6 +43,12 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
         hints.insert(2, "- Keep `OPENROUTER_BASE_URL` as `https://openrouter.ai/api/v1` unless you intentionally use a custom gateway.")
     elif "openai" in lower_msg or "gpt" in lower_msg:
         hints.insert(0, "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.")
+    elif any(t in lower_msg for t in ("context length", "context_length", "too many tokens",
+                                      "maximum context", "reduce the length")):
+        hints.insert(0, "- The investigation exceeded the model's context window. "
+                        "Lower **Content per Page** or **Max Pages to Scrape** in the sidebar, "
+                        "or pick a model with a larger window.")
+        hints.insert(1, "- On Ollama, raise `OLLAMA_NUM_CTX` (see TROUBLESHOOTING.md).")
     elif "google" in lower_msg or "gemini" in lower_msg:
         hints.insert(0, "- Google Gemini models need `GOOGLE_API_KEY` or Application Default Credentials.")
 
@@ -176,10 +183,21 @@ model_display_names = get_model_display_names(model_options)
 _CHEAP_TIER_TOKENS = ("nano", "mini", "flash-lite", "flash", "lite", "haiku", "small")
 
 
+def _has_tier_token(name: str, token: str) -> bool:
+    """Match a tier token as a whole segment, not a bare substring.
+
+    "mini" is a substring of "gemini", so a plain `in` test made every Gemini
+    model read as a mini model and the preselection landed wherever the list
+    happened to start.
+    """
+    return re.search(r"(?:^|[-_. /:])" + re.escape(token) + r"(?:$|[-_. /:])",
+                     name.lower()) is not None
+
+
 def _default_model_index(options) -> int:
     for token in _CHEAP_TIER_TOKENS:
         for idx, name in enumerate(options):
-            if token in name.lower():
+            if _has_tier_token(name, token):
                 return idx
     return 0
 
@@ -569,9 +587,12 @@ if _do_run:
     # Stage 3 - Search dark web
     with status_slot.container():
         with st.spinner("🔍 Searching dark web..."):
-            st.session_state.results = cached_search_results(
-                st.session_state.refined, threads
-            )
+            try:
+                st.session_state.results = cached_search_results(
+                    st.session_state.refined, threads
+                )
+            except Exception as e:
+                _render_pipeline_error("search the dark web", e)
     if not st.session_state.results:
         _render_no_results(
             "No dark web results came back for this query.",
@@ -593,10 +614,13 @@ if _do_run:
     # Stage 4 - Filter results
     with status_slot.container():
         with st.spinner("🗂️ Filtering results..."):
-            st.session_state.filtered = filter_results(
-                llm, st.session_state.refined, st.session_state.results,
-                limit=max_scrape,
-            )
+            try:
+                st.session_state.filtered = filter_results(
+                    llm, st.session_state.refined, st.session_state.results,
+                    limit=max_scrape,
+                )
+            except Exception as e:
+                _render_pipeline_error("filter the search results", e)
     if not st.session_state.filtered:
         _render_no_results(
             "Found {} raw links, but none of them matched this query.".format(
@@ -620,9 +644,12 @@ if _do_run:
     # Stage 5 - Scrape content
     with status_slot.container():
         with st.spinner("📜 Scraping content..."):
-            st.session_state.scraped = cached_scrape_multiple(
-                st.session_state.filtered, threads, content_chars
-            )
+            try:
+                st.session_state.scraped = cached_scrape_multiple(
+                    st.session_state.filtered, threads, content_chars
+                )
+            except Exception as e:
+                _render_pipeline_error("scrape the selected pages", e)
 
     # Stage 6 - Summarize (streaming)
     st.session_state.streamed_summary = ""
@@ -639,10 +666,13 @@ if _do_run:
         with st.spinner("✍️ Generating summary..."):
             stream_handler = BufferedStreamingHandler(ui_callback=ui_emit)
             llm.callbacks = [stream_handler]
-            summary_text = generate_summary(
-                llm, query, st.session_state.scraped,
-                preset=selected_preset, custom_instructions=custom_instructions,
-            )
+            try:
+                summary_text = generate_summary(
+                    llm, query, st.session_state.scraped,
+                    preset=selected_preset, custom_instructions=custom_instructions,
+                )
+            except Exception as e:
+                _render_pipeline_error("generate the investigation summary", e)
 
     # Reasoning models (OpenAI o1, DeepSeek R1, etc.) stream their chain-of-thought as
     # reasoning_content, so on_llm_new_token never fires with answer tokens and the

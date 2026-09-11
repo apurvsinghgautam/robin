@@ -110,14 +110,25 @@ def _extract_target_onion(href, engine_host):
     return None
 
 
+MAX_TITLE_CHARS = 200
+
+
 def _is_useful_title(title):
     """A title is usable if it has some length and any alphanumeric character.
 
     `isalnum` is Unicode-aware on purpose. An ASCII-only test silently discarded
     every Cyrillic, CJK and Arabic title, which on a dark web OSINT tool means
     discarding a large share of the highest-value results.
+
+    There is no upper bound here. Some engines put the whole result snippet
+    inside the anchor text, and a long title is a reason to trim, never a reason
+    to throw the result away.
     """
-    return bool(title) and 4 <= len(title) <= 200 and any(ch.isalnum() for ch in title)
+    return bool(title) and len(title) >= 4 and any(ch.isalnum() for ch in title)
+
+
+def _trim_title(title):
+    return title if len(title) <= MAX_TITLE_CHARS else title[:MAX_TITLE_CHARS].rstrip() + "..."
 
 
 def fetch_search_results(endpoint, query):
@@ -145,7 +156,7 @@ def fetch_search_results(endpoint, query):
                 title = a.get_text(strip=True)
                 if not _is_useful_title(title):
                     continue
-                links.append({"title": title, "link": target})
+                links.append({"title": _trim_title(title), "link": target})
             except Exception:
                 continue
         return links
