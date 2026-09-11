@@ -37,8 +37,32 @@ This is almost always the container being unable to reach Ollama on the host.
    running under Docker. Use `http://127.0.0.1:11434` only when running Robin
    directly on the host.
 2. Run the container with `--add-host=host.docker.internal:host-gateway`.
-3. Serve Ollama on all interfaces, not just loopback:
-   `OLLAMA_HOST=0.0.0.0 ollama serve &`
+3. Serve Ollama on all interfaces, not just loopback. Ollama binds to
+   `127.0.0.1` by default, which a container cannot reach no matter what
+   `OLLAMA_BASE_URL` says.
+
+   If you started Ollama yourself:
+   ```bash
+   OLLAMA_HOST=0.0.0.0 ollama serve &
+   ```
+
+   If Ollama runs as a systemd service, which is the default on most Linux
+   installs, the command above will not help because systemd is already running
+   its own copy. Edit the service instead:
+   ```bash
+   sudo systemctl edit ollama.service
+   # add these two lines:
+   #   [Service]
+   #   Environment="OLLAMA_HOST=0.0.0.0"
+   sudo systemctl daemon-reload && sudo systemctl restart ollama
+   ```
+
+   On macOS, quit the Ollama app first, then run the `ollama serve` command
+   above in a terminal.
+
+   Confirm it worked: `curl http://localhost:11434/api/tags` should answer, and
+   `ss -lntp | grep 11434` should show `0.0.0.0:11434` rather than
+   `127.0.0.1:11434`.
 4. Confirm you have actually pulled a model: `ollama list`. Robin lists what
    Ollama reports, so an empty Ollama means an empty section in the picker.
 
@@ -68,6 +92,22 @@ now sets it explicitly, defaulting to 32768.
   per Page** shows the estimated tokens per investigation; the window needs to
   hold that plus the prompt and the answer.
 - Reducing **Content per Page** or **Max Pages to Scrape** is the other lever.
+
+## Docker container won't start, or the port is taken
+
+- **"port is already allocated"** or **"name already in use"**: an earlier Robin
+  container is still around. Remove it with `docker rm -f robin`, or list what
+  is running with `docker ps -a`. The commands in the README use `--rm` so the
+  container cleans itself up on exit; if you added `--name robin` yourself,
+  you need to remove it between runs.
+- **Port 8501 in use by something else**: map a different one, for example
+  `-p 8600:8501`, then open `http://localhost:8600`.
+- **`.env` not picked up**: the mount is literal. Run the command from the
+  directory that holds your `.env`, or give the full path in place of
+  `$(pwd)/.env`.
+- **`host.docker.internal` not resolving on Linux**: the
+  `--add-host=host.docker.internal:host-gateway` flag is what creates it. It is
+  in the README command; if you wrote your own, add it.
 
 ## Reports feel thin, or an investigation costs more than expected
 

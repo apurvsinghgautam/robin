@@ -4,9 +4,20 @@ name: PR Checks
 # and a :latest Docker image automatically, so this is the only gate between a
 # change and users pulling it.
 on:
+  # Any branch except main, so a plain `git push` of a feature branch is checked
+  # without needing a PR open yet.
+  push:
+    branches-ignore: [ main ]
+  # And again on the PR itself, which is what a branch protection rule can
+  # require before the merge button unlocks.
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
+# A branch push and its PR would otherwise duplicate the run.
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
