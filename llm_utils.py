@@ -12,15 +12,12 @@ except ImportError:  # pragma: no cover
     ChatMistralAI = None
 import model_registry
 from langchain_core.callbacks.base import BaseCallbackHandler
-import os
 import time
 from config import (
     OLLAMA_BASE_URL,
-    OPENROUTER_BASE_URL,
     OPENROUTER_API_KEY,
     GOOGLE_API_KEY,
     OPENAI_API_KEY,
-    ANTHROPIC_API_KEY,
     LLAMA_CPP_BASE_URL,
 )
 

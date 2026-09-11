@@ -399,7 +399,7 @@ PRESET_PROMPTS = {
 
 def generate_summary(llm, query, content, preset="threat_intel", custom_instructions=""):
     system_prompt = PRESET_PROMPTS.get(preset, PRESET_PROMPTS["threat_intel"])
-    invoke_vars = {"query": query, "content": content}
+    invoke_vars = {"query": query, "content": _flatten_scraped(content)}
     if custom_instructions and custom_instructions.strip():
         # Append as a template placeholder filled by an invoke value, so literal
         # braces the user typed in Custom Instructions aren't misread as
@@ -438,6 +438,28 @@ INVESTIGATION CONTEXT:
 """
 
 
+def _flatten_scraped(scraped):
+    """Render the scraper's {url: text} mapping as readable text.
+
+    scrape_multiple returns a dict. Iterating a dict yields its KEYS, so three
+    call sites were handing the model a bare list of onion hostnames and no page
+    content whatsoever: follow-up chat could not answer questions about data it
+    had scraped, pivots were generated from hostnames, and the summary got a raw
+    Python dict repr. Tolerant of the str and list shapes that investigations
+    loaded from disk can still carry.
+    """
+    if not scraped:
+        return ""
+    if isinstance(scraped, str):
+        return scraped
+    if isinstance(scraped, dict):
+        return "\n\n".join(
+            "SOURCE: {}\n{}".format(url, text)
+            for url, text in scraped.items() if text
+        )
+    return "\n\n".join(str(x) for x in scraped)
+
+
 def build_followup_context(query, refined, sources, scraped, summary, char_budget=12000):
     """Assemble the grounding context a follow-up is answered from:
     original + refined query, sources, the generated summary, and a
@@ -452,7 +474,7 @@ def build_followup_context(query, refined, sources, scraped, summary, char_budge
     if summary:
         parts.append("INVESTIGATION SUMMARY:\n" + str(summary))
     if scraped:
-        raw = scraped if isinstance(scraped, str) else "\n\n".join(str(x) for x in scraped)
+        raw = _flatten_scraped(scraped)
         if len(raw) > char_budget:
             raw = raw[:char_budget] + "\n\n[...truncated...]"
         parts.append("RAW SCRAPED CONTENT (may be truncated):\n" + raw)
@@ -504,7 +526,7 @@ def suggest_pivots(llm, query, content, preset="threat_intel", max_pivots=5):
     INVESTIGATION DATA:
     """.replace("{max_pivots}", str(max_pivots))
 
-    raw_content = content if isinstance(content, str) else "\n\n".join(str(x) for x in (content or []))
+    raw_content = _flatten_scraped(content)
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{content}")]
     )

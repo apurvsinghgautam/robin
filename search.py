@@ -1,7 +1,5 @@
 import requests
 import random, re
-import json
-import os
 from urllib.parse import urlparse, parse_qs, unquote
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -65,8 +63,17 @@ def get_tor_session():
 
 ONION_URL_RE = re.compile(r'https?://[a-z0-9.-]+\.onion[^\s"\'<>]*', re.IGNORECASE)
 
-# Paths that are the engine's own result page rather than a discovered target.
-_SEARCH_PATHS = {"/search", "/index.php", "/search.php", "/oss/index.php"}
+# Hosts of the engines Robin itself queries. A result pointing at one of these
+# is another engine's result page, not a discovered target.
+#
+# This used to be a set of PATHS, which was wrong: /index.php and /search.php
+# are the default landing paths for phpBB, SMF and most PHP-based onion forums
+# and markets, so matching on path discarded exactly the sites Robin exists to
+# find. Matching on host is both precise and self-maintaining, since it derives
+# from SEARCH_ENGINES above.
+_ENGINE_HOSTS = {
+    (urlparse(e["url"]).hostname or "").lower() for e in SEARCH_ENGINES
+}
 
 
 def _extract_target_onion(href, engine_host):
@@ -104,7 +111,13 @@ def _extract_target_onion(href, engine_host):
 
 
 def _is_useful_title(title):
-    return bool(title) and 4 <= len(title) <= 200 and bool(re.search(r"[a-zA-Z0-9]", title))
+    """A title is usable if it has some length and any alphanumeric character.
+
+    `isalnum` is Unicode-aware on purpose. An ASCII-only test silently discarded
+    every Cyrillic, CJK and Arabic title, which on a dark web OSINT tool means
+    discarding a large share of the highest-value results.
+    """
+    return bool(title) and 4 <= len(title) <= 200 and any(ch.isalnum() for ch in title)
 
 
 def fetch_search_results(endpoint, query):
@@ -126,9 +139,8 @@ def fetch_search_results(endpoint, query):
                 target = _extract_target_onion(a.get("href"), engine_host)
                 if not target:
                     continue
-                # Drop links to another engine's result page (path match only, so
-                # a target URL that merely contains the word "search" survives).
-                if urlparse(target).path.rstrip("/") in _SEARCH_PATHS:
+                # Drop results that point at another engine Robin already queries.
+                if (urlparse(target).hostname or "").lower() in _ENGINE_HOSTS:
                     continue
                 title = a.get_text(strip=True)
                 if not _is_useful_title(title):
