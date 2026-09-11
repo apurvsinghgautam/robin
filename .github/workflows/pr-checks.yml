@@ -106,3 +106,9 @@ jobs:
           assert len(keys) == 3, keys
           print("search parser OK")
           PY
+
+      - name: Regression tests
+        # Stdlib unittest on purpose: these guard specific defects and should
+        # not add a test-runner dependency to a repo users install from
+        # requirements.txt.
+        run: python -m unittest discover -s tests -t . -v
