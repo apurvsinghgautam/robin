@@ -26,6 +26,10 @@ USER_AGENTS = [
 
 MAX_DOWNLOAD_BYTES = 1_000_000
 MAX_EXTRACTED_TEXT_CHARS = 50_000
+
+# If stripping structural tags leaves less than this fraction of the page, the
+# strip is assumed to have eaten the content and is discarded.
+MIN_STRIPPED_RATIO = 0.25
 # Characters of each scraped page handed to the LLM. This is the budget that
 # decides how much of a page the summarizer actually reads: Robin downloads up
 # to MAX_DOWNLOAD_BYTES and extracts up to MAX_EXTRACTED_TEXT_CHARS, then trims
@@ -83,6 +87,34 @@ def get_tor_session():
     """
     return _build_session(use_tor=True)
 
+# Menus, banners and footers are the page's furniture, not its content, and
+# feeding them to the summarizer both wastes context and invites the model to
+# describe a site's navigation instead of its substance. <form> is deliberately
+# absent: phpBB and SMF wrap the entire topic table in one, so stripping it
+# deletes the listing and leaves the board name alone, with no error anywhere.
+BOILERPLATE_TAGS = ["nav", "header", "footer", "aside"]
+
+
+def extract_page_text(html):
+    """Return a page's readable text with structural furniture removed.
+
+    Over-stripping is silent data loss: a template that puts the real content
+    inside one of BOILERPLATE_TAGS yields a near-empty page that still looks
+    like a successful scrape. When the strip eats most of the page, distrust it
+    and keep the unstripped text instead.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style"]):
+        tag.extract()
+    full_text = ' '.join(soup.get_text(separator=' ').split())
+    for tag in soup(BOILERPLATE_TAGS):
+        tag.extract()
+    text = ' '.join(soup.get_text(separator=' ').split())
+    if len(text) < MIN_STRIPPED_RATIO * len(full_text):
+        return full_text
+    return text
+
+
 def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, control_password=None):
     """
     Scrapes a single URL using a robust Tor session.
@@ -130,17 +162,7 @@ def scrape_single(url_data, rotate=False, rotate_interval=5, control_port=9051, 
 
             html = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
 
-            soup = BeautifulSoup(html, "html.parser")
-            # Remove scripts, styles and structural boilerplate. Menus, banners,
-            # footers and forms are the page's furniture, not its content, and
-            # feeding them to the summarizer both wastes context and invites the
-            # model to describe a site's navigation instead of its substance.
-            for tag in soup(["script", "style", "nav", "header", "footer", "aside", "form"]):
-                tag.extract()
-            text = soup.get_text(separator=' ')
-            # Normalize whitespace
-            text = ' '.join(text.split())
-            text = text[:MAX_EXTRACTED_TEXT_CHARS]
+            text = extract_page_text(html)[:MAX_EXTRACTED_TEXT_CHARS]
             scraped_text = f"{title} - {text}" if text else title
         else:
             scraped_text = title
