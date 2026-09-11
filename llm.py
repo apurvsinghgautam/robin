@@ -101,6 +101,37 @@ def refine_query(llm, user_input):
     return chain.invoke({"query": user_input})
 
 
+_RANGE_RE = re.compile(r"(?<![\w-])(\d+)\s*[-\u2013]\s*(\d+)(?![\w])")
+_INDEX_RE = re.compile(r"(?<![\w-])(\d+)(?![\w])")
+
+
+def _iter_selected_indices(payload, max_span=100):
+    """Yield the indices a model selected, expanding "10-12" style ranges.
+
+    A bare digit scan read "1-5" as the single index 1 and silently dropped the
+    other four. Ranges are expanded in order; an implausibly wide one is treated
+    as two separate numbers rather than flooding the selection.
+    """
+    consumed = []
+    for match in _RANGE_RE.finditer(payload):
+        start, end = int(match.group(1)), int(match.group(2))
+        if 0 < end - start < max_span:
+            consumed.append((match.span(), list(range(start, end + 1))))
+
+    out, covered = [], set()
+    for (span, values) in consumed:
+        covered.update(range(*span))
+    cursor, expanded = 0, {span[0]: values for span, values in consumed}
+    for match in _INDEX_RE.finditer(payload):
+        if match.start() in covered and match.start() not in expanded:
+            continue
+        if match.start() in expanded:
+            out.extend(expanded[match.start()])
+        else:
+            out.append(int(match.group(1)))
+    return out
+
+
 def _strip_leading_label(reply):
     """Drop a model's prose label so its numbers are not read as selections.
 
@@ -176,13 +207,9 @@ def filter_results(llm, query, results, limit=20):
     # a word or a minus sign, so "-4" and "v2" do not become selections.
     payload = _strip_leading_label(result_indices)
     parsed_indices = []
-    for match in re.findall(r"(?<![\w-])(\d+)(?![\w])", payload):
-        try:
-            idx = int(match)
-            if 1 <= idx <= len(results):
-                parsed_indices.append(idx)
-        except ValueError:
-            continue
+    for token in _iter_selected_indices(payload):
+        if 1 <= token <= len(results):
+            parsed_indices.append(token)
 
     # Remove duplicates while preserving order
     seen = set()
