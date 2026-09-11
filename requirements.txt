@@ -8,4 +8,5 @@ langchain-ollama
 backports.tarfile
 langchain-anthropic
 langchain_community
-langchain_google_genailangchain-mistralai
+langchain_google_genai
+langchain-mistralai
