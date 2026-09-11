@@ -110,9 +110,10 @@ opening an issue.
 
 ## Contributing
 
-Contributions are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the
-pull request flow, the automated checks that run on every push, and what kinds
-of change fit the tool.
+Bugs go in [Issues](https://github.com/apurvsinghgautam/robin/issues). Questions
+and feature ideas go in
+[Discussions](https://github.com/apurvsinghgautam/robin/discussions). See
+**[CONTRIBUTING.md](CONTRIBUTING.md)** before opening a pull request.
 
 ---
 

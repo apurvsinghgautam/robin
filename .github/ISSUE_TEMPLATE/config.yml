@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or something not working
+    url: https://github.com/apurvsinghgautam/robin/discussions/categories/q-a
+    about: Ask in Discussions. Check TROUBLESHOOTING.md first, it covers the common setup problems.
+  - name: Feature idea
+    url: https://github.com/apurvsinghgautam/robin/discussions/categories/ideas
+    about: Share it in Discussions. Ideas that get picked up are converted into an Issue.
+  - name: Troubleshooting guide
+    url: https://github.com/apurvsinghgautam/robin/blob/main/TROUBLESHOOTING.md
+    about: Ollama in Docker, Tor errors, empty model lists, API key problems.
