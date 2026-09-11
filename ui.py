@@ -3,6 +3,7 @@ import base64
 import json
 import re
 import streamlit as st
+import model_registry
 from datetime import datetime
 from pathlib import Path
 from scrape import scrape_multiple
@@ -204,12 +205,29 @@ def _default_model_index(options) -> int:
 default_model_index = _default_model_index(model_options) if model_options else 0
 
 if not model_options:
-    st.sidebar.error(
-        "⛔ **No LLM models available.**\n\n"
-        "No API keys or local providers are configured. "
-        "Set at least one in your `.env` file and restart Robin.\n\n"
-        "See **Provider Configuration** below for details."
-    )
+    # Distinguish "nothing configured" from "configured but unreachable". Both
+    # used to render the same message, which sent a user with a perfectly good
+    # key off to check their .env.
+    try:
+        _configured = model_registry.configured_providers()
+    except Exception:
+        _configured = []
+    if _configured:
+        st.sidebar.error(
+            "⛔ **Could not load models for: {}.**\n\n"
+            "The key is set, so this is usually the provider being unreachable: "
+            "no network, an outage, or an expired key. Robin falls back to a "
+            "bundled model list, but it does not carry every provider.\n\n"
+            "Retry once you have a connection, or add a second provider's key. "
+            "See TROUBLESHOOTING.md.".format(", ".join(_configured))
+        )
+    else:
+        st.sidebar.error(
+            "⛔ **No LLM models available.**\n\n"
+            "No API keys or local providers are configured. "
+            "Set at least one in your `.env` file and restart Robin.\n\n"
+            "See **Provider Configuration** below for details."
+        )
     st.stop()
 
 model = st.sidebar.selectbox(

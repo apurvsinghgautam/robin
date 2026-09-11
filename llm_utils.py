@@ -13,6 +13,7 @@ except ImportError:  # pragma: no cover
 import model_registry
 from langchain_core.callbacks.base import BaseCallbackHandler
 import hashlib
+import re
 import time
 from config import (
     OLLAMA_BASE_URL,
@@ -49,12 +50,26 @@ class BufferedStreamingHandler(BaseCallbackHandler):
 # Instantiate common dependencies once
 _common_callbacks = [BufferedStreamingHandler(buffer_limit=60)]
 
-# Define common parameters for most LLMs
+# Parameters every client gets. temperature is deliberately NOT here: OpenAI's
+# reasoning and gpt-5 family reject an explicit temperature outright
+# ("Unsupported value: 'temperature' does not support 0 with this model"), and
+# sending it to gpt-5-nano, o3 or o4-mini fails the very first request. Each
+# provider adds temperature only where it is accepted.
 _common_llm_params = {
-    "temperature": 0,
     "streaming": True,
     "callbacks": _common_callbacks,
 }
+
+# OpenAI families that still accept an explicit temperature. Treated as an
+# allowlist rather than a denylist of reasoning models, because omitting
+# temperature always works while sending it to a model that refuses it is a
+# hard failure, and new model families appear faster than this list can track.
+_TEMPERATURE_OK = re.compile(r"^(gpt-3\.5|gpt-4|chatgpt-4)", re.IGNORECASE)
+
+
+def _openai_temperature(model_name: str) -> dict:
+    bare = model_name.split("/", 1)[-1]
+    return {"temperature": 0} if _TEMPERATURE_OK.match(bare) else {}
 
 # Model IDs are no longer hardcoded here. `model_registry` asks each provider
 # what it currently serves (see that module's docstring and issue #140); this
@@ -73,25 +88,31 @@ def _provider_constructor(provider: str, model_name: str) -> Optional[dict]:
     """Return {"class", "constructor_params"} for a registry entry."""
     if provider == "openai":
         return {"class": ChatOpenAI,
-                "constructor_params": {"model_name": model_name}}
+                "constructor_params": dict(model_name=model_name,
+                                           **_openai_temperature(model_name))}
     if provider == "anthropic":
         return {"class": ChatAnthropic,
-                "constructor_params": {"model": model_name}}
+                "constructor_params": {"model": model_name, "temperature": 0}}
     if provider == "google":
         return {"class": ChatGoogleGenerativeAI,
-                "constructor_params": {"model": model_name,
+                "constructor_params": {"model": model_name, "temperature": 0,
                                        "google_api_key": GOOGLE_API_KEY}}
     if provider == "mistral":
         if ChatMistralAI is None:
             return None
         return {"class": ChatMistralAI,
-                "constructor_params": {"model": model_name,
+                "constructor_params": {"model": model_name, "temperature": 0,
                                        "api_key": config.MISTRAL_API_KEY}}
     if provider == "openrouter":
+        # An OpenRouter id carries its vendor as a prefix, so the same rule
+        # applies to the OpenAI models served through it.
         return {"class": ChatOpenAI,
-                "constructor_params": {"model_name": model_name,
-                                       "base_url": _openrouter_base(),
-                                       "api_key": OPENROUTER_API_KEY}}
+                "constructor_params": dict(model_name=model_name,
+                                           base_url=_openrouter_base(),
+                                           api_key=OPENROUTER_API_KEY,
+                                           **(_openai_temperature(model_name)
+                                              if model_name.startswith("openai/")
+                                              else {"temperature": 0}))}
     return None
 
 
@@ -288,6 +309,7 @@ def resolve_model_config(model_choice: str):
                 "class": ChatOpenAI,
                 "constructor_params": {
                     "model_name": llama_model,
+                    "temperature": 0,
                     "base_url": base,
                     "api_key": OPENAI_API_KEY or "sk-local",
                     "streaming": False,
@@ -309,6 +331,7 @@ def resolve_model_config(model_choice: str):
                 "class": ChatOpenAI,
                 "constructor_params": {
                     "model_name": custom_model,
+                    "temperature": 0,
                     "base_url": base,
                     "api_key": config.CUSTOM_API_KEY or "sk-custom",
                     "streaming": False,
@@ -321,6 +344,7 @@ def resolve_model_config(model_choice: str):
                 "class": ChatOllama,
                 "constructor_params": {
                     "model": ollama_model,
+                    "temperature": 0,
                     "base_url": OLLAMA_BASE_URL,
                     # Without this, Ollama's own default window applies and the
                     # tail of every investigation is dropped before the model

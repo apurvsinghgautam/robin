@@ -80,6 +80,10 @@ it asks each provider what it currently serves and caches the answer.
 - If a provider is unreachable, Robin keeps the last list it had rather than
   emptying the picker, so a stale entry can survive an outage. A restart with
   the network back will clear it.
+- The bundled offline list covers OpenAI, Anthropic, Google and OpenRouter.
+  Mistral has no bundled entry yet, so a Mistral-only setup needs one
+  successful online run before its models appear. Robin will name the provider
+  it could not reach rather than claiming nothing is configured.
 
 ## Local model answers ignore the end of the investigation
 

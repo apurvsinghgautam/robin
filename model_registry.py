@@ -148,13 +148,24 @@ def _fetch_anthropic() -> List[str]:
 def _fetch_google() -> List[str]:
     """Google needs both signals: generateContent support AND a token check,
     because its image and text-to-speech models also advertise generateContent."""
-    data = _get_json(
-        "https://generativelanguage.googleapis.com/v1beta/models?key={}".format(
-            config.GOOGLE_API_KEY
-        )
-    )
+    # Google pages its catalogue. The default page is 50 entries with a
+    # nextPageToken; ignoring it silently truncated the picker and cached the
+    # truncated list for the whole TTL.
+    entries, token, pages = [], None, 0
+    while True:
+        url = ("https://generativelanguage.googleapis.com/v1beta/models"
+               "?key={}&pageSize=1000".format(config.GOOGLE_API_KEY))
+        if token:
+            url += "&pageToken=" + token
+        data = _get_json(url)
+        entries.extend(data.get("models", []))
+        token = data.get("nextPageToken")
+        pages += 1
+        if not token or pages >= 10:
+            break
+
     out = []
-    for m in data.get("models", []):
+    for m in entries:
         if "generateContent" not in m.get("supportedGenerationMethods", []):
             continue
         model_id = m.get("name", "").split("/")[-1]
@@ -296,11 +307,13 @@ def refresh(verbose: bool = False) -> Dict[str, List[str]]:
     # timestamp, contradicting this function's own fallback promise.
     merged = dict(_load_seed())
     merged.update(_load_cache(ignore_ttl=True) or {})
+    fetched_ok = set()
     for name in configured_providers():
         try:
             models = PROVIDERS[name]["fetch"]()
             if models:
                 merged[name] = models
+                fetched_ok.add(name)
                 if verbose:
                     print("  {:<12} {} models".format(name, len(models)))
             else:
@@ -321,7 +334,15 @@ def get_registry(force_refresh: bool = False) -> Dict[str, List[str]]:
         return refresh()
     cached = _load_cache()
     if cached:
-        return cached
+        # A cache written before a provider was configured has no entry for it,
+        # or only the bundled seed's. Returning it unconditionally meant that
+        # adding an API key did nothing until the TTL expired, up to 24 hours
+        # later, with the picker showing stale or seed-only models meanwhile.
+        missing = [p for p in configured_providers() if p not in cached]
+        if not missing:
+            return cached
+        logger.info("Refreshing: %s configured since the cache was written.",
+                    ", ".join(missing))
     return refresh()
 
 
