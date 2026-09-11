@@ -2,7 +2,7 @@
    <img src=".github/assets/logo.png" alt="Logo" width="300">
    <br><a href="https://github.com/apurvsinghgautam/robin/actions/workflows/release.yml"><img alt="Release" src="https://github.com/apurvsinghgautam/robin/actions/workflows/release.yml/badge.svg"></a> <a href="https://github.com/apurvsinghgautam/robin/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/apurvsinghgautam/robin"></a> <a href="https://hub.docker.com/r/apurvsg/robin"><img alt="Docker Pulls" src="https://img.shields.io/docker/pulls/apurvsg/robin"></a>
    <p align="center">
- <a href="https://www.star-history.com/apurvsinghgautam/robin"><img src="https://api.star-history.com/badge?repo=apurvsinghgautam/robin&type=trending" alt="GitHub Trending Repository of the Day" /></a>
+ <a href="https://www.star-history.com/apurvsinghgautam/robin"><img src="https://api.star-history.com/badge?repo=apurvsinghgautam/robin&type=rank&theme=dark" alt="Star History Rank" /> <img src="https://api.star-history.com/badge?repo=apurvsinghgautam/robin&type=trending&theme=dark" alt="GitHub Trending Repository of the Day" /></a>
 </p>
    <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
