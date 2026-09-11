@@ -110,6 +110,11 @@ Contributions are welcome! Please feel free to submit a Pull Request if you have
 - Push to the branch (git push origin feature/amazing-feature)
 - Open a Pull Request
 
+Pull requests run automated checks before they can be merged: every module is
+compiled and imported, `pyflakes` must be clean, the bundled model seed is
+validated, and the search parser and no-API-key paths are smoke-tested. Run them
+locally first with `python -m compileall -q . && python -m pyflakes *.py`.
+
 Open an Issue for any of these situations:
 - If you spot a bug or bad code
 - If you have a feature request idea

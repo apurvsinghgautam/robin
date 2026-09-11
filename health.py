@@ -1,7 +1,6 @@
 import time
 import socket
 import random
-import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from search import SEARCH_ENGINES, get_tor_session, USER_AGENTS

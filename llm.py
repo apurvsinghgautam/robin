@@ -47,7 +47,7 @@ def get_llm(model_choice):
 
 def _ensure_credentials(model_choice: str, llm_class, model_params: dict) -> None:
     """Raise a clear error if the user selects a hosted model without a key."""
-    from config import CUSTOM_API_BASE_URL, CUSTOM_API_KEY
+    from config import CUSTOM_API_BASE_URL
 
     def _require(key_value, env_var, provider_name):
         if key_value:
@@ -121,7 +121,7 @@ def _iter_selected_indices(payload, max_span=100):
     out, covered = [], set()
     for (span, values) in consumed:
         covered.update(range(*span))
-    cursor, expanded = 0, {span[0]: values for span, values in consumed}
+    expanded = {span[0]: values for span, values in consumed}
     for match in _INDEX_RE.finditer(payload):
         if match.start() in covered and match.start() not in expanded:
             continue

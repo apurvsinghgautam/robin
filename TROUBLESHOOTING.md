@@ -20,6 +20,9 @@ empty dropdown means it found no keys at all.
 - You only need the key for the provider you intend to use. A `.env` containing
   nothing but `ANTHROPIC_API_KEY` is fine, and Robin will show Claude models
   only. There is no requirement to set `OPENAI_API_KEY` if you aren't using it.
+- Supported keys are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`,
+  `MISTRAL_API_KEY` and `OPENROUTER_API_KEY`. Local servers (Ollama, llama.cpp,
+  any OpenAI-compatible endpoint) need no key at all.
 - Only API keys belong in `.env`. Everything else, Ollama's URL included, has a
   working default in `config.py`; add a line only to override one.
 - Leftover `your_...` placeholders from an older sample file are harmless. Robin
@@ -46,7 +49,8 @@ it asks each provider what it currently serves and caches the answer.
 
 - Restart Robin to force a refresh. The container refreshes on start.
 - Delete the cache to force a rebuild: remove `~/.robin/models_cache.json`, or
-  whatever `ROBIN_CACHE_DIR` points at.
+  whatever `ROBIN_CACHE_DIR` points at. A damaged cache repairs itself on the
+  next launch, so this is rarely necessary.
 - Set `MODEL_REGISTRY_TTL_HOURS` to control how long a fetched list is reused.
   The default is 24.
 - If a provider is unreachable, Robin keeps the last list it had rather than
@@ -64,6 +68,32 @@ now sets it explicitly, defaulting to 32768.
   per Page** shows the estimated tokens per investigation; the window needs to
   hold that plus the prompt and the answer.
 - Reducing **Content per Page** or **Max Pages to Scrape** is the other lever.
+
+## Reports feel thin, or an investigation costs more than expected
+
+Two sidebar sliders decide how much the model actually reads, and the caption
+under them shows the estimated tokens per investigation before you run it.
+
+- **Content per Page** is how much of each scraped page reaches the model.
+  Default 8,000 characters. Raise it when reports miss detail that you can see
+  on the page yourself; lower it to cut cost. Raising it never slows the Tor
+  scrape, because the trim happens after the page is already downloaded.
+- **Max Pages to Scrape** is how many results get scraped and summarized.
+- **Max Results to Filter** is how many raw results the model chooses from. It
+  affects selection quality, not how much text is read.
+
+If reports are thin but the sources look right, raise Content per Page first.
+If the investigation is expensive, lower Max Pages to Scrape first, since it
+multiplies the per-page budget.
+
+## Why does an engine appear in my results?
+
+It shouldn't, and from v2.9 it doesn't. Robin drops any result pointing at one
+of the 16 search engines it queries, and unwraps engine redirect links to the
+real target underneath. Earlier versions collected every `.onion` link on the
+page, including the engine's own navigation, categories, adverts and footer, so
+reports could be written from a search engine's menu. If you still see one,
+please open an issue with the query and the engine.
 
 ## 401 / "User not found" / authentication errors
 
@@ -114,8 +144,10 @@ from search engine navigation pages.
 
 If you're seeing this more than you expect:
 
-- Broaden the query. Very specific identifiers and non-English terms often have
-  no dark web presence at all, and that is a real answer.
+- Broaden the query. Very specific identifiers often have no dark web presence
+  at all, and that is a real answer.
+- Non-English results are supported. Earlier versions discarded Cyrillic, CJK
+  and Arabic titles at the search layer; from v2.9 they are kept.
 - Check how many engines responded. If only one or two did, coverage is thin.
 - Raise **Max Results to Filter** in the sidebar to give the filtering model
   more candidates to work with.
@@ -129,5 +161,6 @@ Include:
 - Whether Tor reached `Bootstrapped 100%`
 - The output of **Check Search Engines**
 - The full error text, not a screenshot crop
+- The **Content per Page** and **Max Pages to Scrape** values you were using
 
 Redact your API keys and any sensitive query terms before posting.
