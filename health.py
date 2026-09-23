@@ -1,32 +1,44 @@
+import os
 import time
 import socket
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
 
-from search import SEARCH_ENGINES, get_tor_session, USER_AGENTS
+from config import redact_secrets, RobinConfig
+from search import SEARCH_ENGINES, get_tor_session, tor_bootstrapped, USER_AGENTS
+from scrape import get_over_tor
 from llm import get_llm
 from llm_utils import resolve_model_config
 
 
 def check_tor_proxy():
-    """Test that the Tor SOCKS5 proxy on 127.0.0.1:9050 is accepting connections."""
+    """Test that Tor is accepting connections and can carry traffic.
+
+    The SOCKS port opens about twenty seconds before Tor can build a circuit,
+    so an open port on its own is reported as starting, not up."""
     try:
         start = time.time()
         sock = socket.create_connection(("127.0.0.1", 9050), timeout=5)
         sock.close()
         latency_ms = round((time.time() - start) * 1000)
-        return {"status": "up", "latency_ms": latency_ms, "error": None}
     except Exception as e:
         return {"status": "down", "latency_ms": None, "error": str(e)}
+    if not tor_bootstrapped(os.environ.get("ROBIN_TOR_LOG")):
+        return {"status": "starting", "latency_ms": latency_ms,
+                "error": "the SOCKS port is open but Tor has not bootstrapped yet"}
+    return {"status": "up", "latency_ms": latency_ms, "error": None}
 
 
-def check_llm_health(model_choice):
+def check_llm_health(model_choice, cfg: Optional[RobinConfig] = None):
+    """Test connectivity to the selected LLM by sending a minimal prompt.
+
+    Returns {status, latency_ms, error, provider}. Without `cfg`, the
+    configuration comes from the environment.
     """
-    Test actual connectivity to the selected LLM by sending a minimal prompt.
-    Returns {status, latency_ms, error, provider}.
-    """
-    config = resolve_model_config(model_choice)
-    if config is None:
+    cfg = cfg if cfg is not None else RobinConfig.from_env()
+    model_cfg = resolve_model_config(model_choice, cfg)
+    if model_cfg is None:
         return {
             "status": "error",
             "latency_ms": None,
@@ -34,9 +46,9 @@ def check_llm_health(model_choice):
             "provider": "unknown",
         }
 
-    # Determine provider name for display
-    class_name = getattr(config["class"], "__name__", str(config["class"]))
-    ctor = config.get("constructor_params", {}) or {}
+    # The provider name is for display only.
+    class_name = getattr(model_cfg["class"], "__name__", str(model_cfg["class"]))
+    ctor = model_cfg.get("constructor_params", {}) or {}
     if "ChatAnthropic" in class_name:
         provider = "Anthropic"
     elif "ChatGoogleGenerativeAI" in class_name:
@@ -56,11 +68,9 @@ def check_llm_health(model_choice):
 
     try:
         start = time.time()
-        llm = get_llm(model_choice)
-        # Send a tiny prompt — cheapest possible API call
+        llm = get_llm(model_choice, cfg)
         response = llm.invoke("Say OK")
         latency_ms = round((time.time() - start) * 1000)
-        # Extract text from response
         text = getattr(response, "content", str(response))
         if text and len(text.strip()) > 0:
             return {
@@ -81,7 +91,7 @@ def check_llm_health(model_choice):
         return {
             "status": "down",
             "latency_ms": latency_ms,
-            "error": str(e),
+            "error": redact_secrets(e, cfg),
             "provider": provider,
         }
 
@@ -89,16 +99,20 @@ def check_llm_health(model_choice):
 def _ping_single_engine(engine):
     """Ping a single search engine via Tor and return its status."""
     name = engine["name"]
-    # Extract base URL (host only) from the template URL
     url_template = engine["url"]
-    # Use a dummy query to form a valid URL for the ping
     url = url_template.format(query="test")
 
     try:
         session = get_tor_session()
         headers = {"User-Agent": random.choice(USER_AGENTS)}
         start = time.time()
-        resp = session.get(url, headers=headers, timeout=20)
+        # Same policy as the search itself: an engine that redirects off the
+        # onion space is reported down, not followed.
+        resp, _ = get_over_tor(session, url, allow_clearweb=False,
+                               headers=headers, timeout=20)
+        # The status line is the ping. The body is never read: an engine that
+        # answers with an endless page costs nothing here.
+        resp.close()
         latency_ms = round((time.time() - start) * 1000)
         return {
             "name": name,
@@ -116,9 +130,9 @@ def _ping_single_engine(engine):
 
 
 def check_search_engines(max_workers=8):
-    """
-    Concurrently ping all search engines via Tor.
-    Returns a list of per-engine status dicts.
+    """Ping every search engine via Tor, concurrently.
+
+    Returns a list of per-engine status dicts in SEARCH_ENGINES order.
     """
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -129,7 +143,6 @@ def check_search_engines(max_workers=8):
         for future in as_completed(future_to_engine):
             results.append(future.result())
 
-    # Sort by original engine order
     name_order = {e["name"]: i for i, e in enumerate(SEARCH_ENGINES)}
     results.sort(key=lambda r: name_order.get(r["name"], 999))
     return results

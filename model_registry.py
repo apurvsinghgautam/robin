@@ -1,46 +1,45 @@
-"""Live model registry.
+"""Live model registry."""
 
-Robin used to carry a hardcoded map of model IDs in ``llm_utils.py``. Providers
-retire models faster than releases go out, so the map went stale and users saw
-"this model is out of date" failures from perfectly valid API keys (issue #140).
-Every new model also meant a code change and a pull request, which is a race
-nobody wins.
-
-The registry asks each provider what it currently serves, in three layers:
-
-1. **Bundled seed** (``models.json``) - shipped in the image, so a first run
-   with no network, or a Tor-only host, still gets a working picker.
-2. **Disk cache** - the last successful fetch, reused until it ages past a TTL.
-3. **Live fetch** - one call per provider whose key is configured.
-
-Only chat-capable models are kept, filtered by each provider's own capability
-signal where one exists and by a token denylist where none does. There is no
-recency filter: as long as a provider still serves a model it stays in the
-picker, and the day they retire it, it leaves on its own.
-
-Sourcing rule (Apurv, 2026-09-10): first-party wins. A model reachable through
-its own vendor's API is listed from that API. The OpenRouter copy appears only
-when the first-party key is absent, so an OpenRouter-only user keeps access to
-GPT, Claude, Gemini and Mistral without seeing every model twice.
-"""
-
+import hashlib
 import json
 import logging
 import os
 import re
+import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import requests
 
-import config
+from config import redact_secrets, RobinConfig
 
 logger = logging.getLogger(__name__)
 
+
+def _report(line: str) -> None:
+    """Write one progress line to stderr, never stdout.
+
+    `entrypoint.sh` warms the registry before the server starts, and in MCP
+    mode stdout is the JSON-RPC transport. stderr still reaches `docker logs`.
+    """
+    sys.stderr.write(line + "\n")
+    sys.stderr.flush()
+
 SEED_PATH = Path(__file__).with_name("models.json")
+CACHE_FILENAME = "models_cache.json"
+# The default location, for a config that names no cache_dir. A config that
+# does name one gets its own file there (see _cache_path).
 CACHE_DIR = Path(os.getenv("ROBIN_CACHE_DIR") or (Path.home() / ".robin"))
-CACHE_PATH = CACHE_DIR / "models_cache.json"
+CACHE_PATH = CACHE_DIR / CACHE_FILENAME
+
+# Where each first-party catalogue lives. Also part of a cache scope, so a
+# change of endpoint is a change of cache.
+OPENAI_API = "https://api.openai.com/v1"
+ANTHROPIC_API = "https://api.anthropic.com/v1"
+GOOGLE_API = "https://generativelanguage.googleapis.com/v1beta"
+MISTRAL_API = "https://api.mistral.ai/v1"
 
 try:
     CACHE_TTL_SECONDS = int(float(os.getenv("MODEL_REGISTRY_TTL_HOURS", "24")) * 3600)
@@ -58,10 +57,9 @@ OPENROUTER_FIRST_PARTY = {
     "mistralai/": "mistral",
 }
 
-# Tokens that mark a model as something other than text chat. Applied only where
-# the provider gives us no capability field of its own. Deliberately a denylist:
-# anything unrecognized is kept, so a model released after this code was written
-# still shows up.
+# Tokens that mark a model as something other than text chat, applied only where
+# the provider gives no capability field of its own. A denylist on purpose:
+# anything unrecognized is kept, so a newly released chat model still shows up.
 NON_CHAT_TOKENS = (
     "embedding", "embed", "moderation", "whisper", "tts", "transcribe",
     "audio", "speech", "dall-e", "image", "vision-only", "sora", "video",
@@ -83,10 +81,8 @@ PROVIDER_NON_CHAT_TOKENS = {
 def _version_sort_key(model_id: str):
     """Order a provider's models newest-first without hardcoding any names.
 
-    Sorts on the numeric version tokens in the id, descending, so `gpt-6-astra`
-    precedes `gpt-5.5` precedes `gpt-4`, and `gemini-3.8-flash` precedes
-    `gemini-2.5-pro`. Ids carrying no version (`chat-latest`) sort last, which
-    keeps an oddity from becoming the picker's default selection.
+    Sorts on the id's numeric version tokens, descending, so `gpt-5.5` precedes
+    `gpt-4`. Ids carrying no version (`chat-latest`) sort last.
     """
     lowered = model_id.lower()
     # Preview/experimental/alias builds sort after stable ones so they never
@@ -118,16 +114,14 @@ def _get_json(url: str, headers: Optional[Dict[str, str]] = None):
 
 
 # --- Per-provider fetchers -------------------------------------------------
-#
 # Each returns a list of provider-side model ids, already filtered to chat.
-# Each raises on transport failure; the caller decides what a failure means.
 
 
-def _fetch_openai() -> List[str]:
+def _fetch_openai(cfg: RobinConfig) -> List[str]:
     """OpenAI exposes no capability field, so filter by token."""
     data = _get_json(
-        "https://api.openai.com/v1/models",
-        {"Authorization": "Bearer {}".format(config.OPENAI_API_KEY)},
+        OPENAI_API + "/models",
+        {"Authorization": "Bearer {}".format(cfg.openai_api_key)},
     )
     return sorted(
         (m["id"] for m in data.get("data", [])
@@ -136,28 +130,28 @@ def _fetch_openai() -> List[str]:
     )
 
 
-def _fetch_anthropic() -> List[str]:
+def _fetch_anthropic(cfg: RobinConfig) -> List[str]:
     """Anthropic lists chat models only; nothing to filter."""
     data = _get_json(
-        "https://api.anthropic.com/v1/models?limit=100",
-        {"x-api-key": config.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"},
+        ANTHROPIC_API + "/models?limit=100",
+        {"x-api-key": cfg.anthropic_api_key, "anthropic-version": "2023-06-01"},
     )
     return [m["id"] for m in data.get("data", []) if m.get("id")]
 
 
-def _fetch_google() -> List[str]:
+def _fetch_google(cfg: RobinConfig) -> List[str]:
     """Google needs both signals: generateContent support AND a token check,
     because its image and text-to-speech models also advertise generateContent."""
-    # Google pages its catalogue. The default page is 50 entries with a
-    # nextPageToken; ignoring it silently truncated the picker and cached the
-    # truncated list for the whole TTL.
+    # Google pages its catalogue, so follow nextPageToken (at most 10 pages);
+    # the first page alone would truncate the picker.
     entries, token, pages = [], None, 0
     while True:
-        url = ("https://generativelanguage.googleapis.com/v1beta/models"
-               "?key={}&pageSize=1000".format(config.GOOGLE_API_KEY))
+        # The key travels as a header: in the query string it lands in every
+        # exception message and every log line that carries the URL.
+        url = GOOGLE_API + "/models?pageSize=1000"
         if token:
             url += "&pageToken=" + token
-        data = _get_json(url)
+        data = _get_json(url, {"x-goog-api-key": cfg.google_api_key})
         entries.extend(data.get("models", []))
         token = data.get("nextPageToken")
         pages += 1
@@ -174,11 +168,11 @@ def _fetch_google() -> List[str]:
     return sorted(out, key=_version_sort_key)
 
 
-def _fetch_mistral() -> List[str]:
+def _fetch_mistral(cfg: RobinConfig) -> List[str]:
     """Mistral carries an explicit completion_chat capability flag."""
     data = _get_json(
-        "https://api.mistral.ai/v1/models",
-        {"Authorization": "Bearer {}".format(config.MISTRAL_API_KEY)},
+        MISTRAL_API + "/models",
+        {"Authorization": "Bearer {}".format(cfg.mistral_api_key)},
     )
     out = []
     for m in data.get("data", []):
@@ -190,27 +184,21 @@ def _fetch_mistral() -> List[str]:
     return sorted(out)
 
 
-def _openrouter_base() -> str:
-    """Fall back to the public base URL when the configured one is unusable.
-
-    Sample .env files ship a ``your_...`` placeholder for this value, and an
-    explicit placeholder overrides the default in ``config.py``, so a user who
-    never edited that line would otherwise get an unusable URL.
-    """
-    configured = (config.OPENROUTER_BASE_URL or "").strip().rstrip("/")
+def _openrouter_base(cfg: RobinConfig) -> str:
+    """The configured OpenRouter base URL, or the public one if it is not a URL."""
+    configured = (cfg.openrouter_base_url or "").strip().rstrip("/")
     if configured.startswith("http"):
         return configured
     return "https://openrouter.ai/api/v1"
 
 
-def _fetch_openrouter() -> List[str]:
+def _fetch_openrouter(cfg: RobinConfig) -> List[str]:
     """OpenRouter's catalogue is public, so it lists even without a key.
 
-    ``:batch`` variants are dropped because they are not usable from a
-    streaming chat call; ``:free`` variants are kept, since those are the
-    entries most users actually want from OpenRouter.
+    ``:batch`` variants are dropped as unusable from a streaming chat call;
+    ``:free`` variants are kept, since most users want those.
     """
-    base = _openrouter_base()
+    base = _openrouter_base(cfg)
     data = _get_json("{}/models".format(base))
     out = []
     for m in data.get("data", []):
@@ -227,31 +215,47 @@ def _fetch_openrouter() -> List[str]:
 
 
 PROVIDERS = {
-    "openai": {"fetch": _fetch_openai, "key": lambda: config.OPENAI_API_KEY},
-    "anthropic": {"fetch": _fetch_anthropic, "key": lambda: config.ANTHROPIC_API_KEY},
-    "google": {"fetch": _fetch_google, "key": lambda: config.GOOGLE_API_KEY},
-    "mistral": {"fetch": _fetch_mistral, "key": lambda: config.MISTRAL_API_KEY},
-    "openrouter": {"fetch": _fetch_openrouter, "key": lambda: config.OPENROUTER_API_KEY},
+    "openai": {"fetch": _fetch_openai, "key": lambda cfg: cfg.openai_api_key},
+    "anthropic": {"fetch": _fetch_anthropic, "key": lambda cfg: cfg.anthropic_api_key},
+    "google": {"fetch": _fetch_google, "key": lambda cfg: cfg.google_api_key},
+    "mistral": {"fetch": _fetch_mistral, "key": lambda cfg: cfg.mistral_api_key},
+    "openrouter": {"fetch": _fetch_openrouter, "key": lambda cfg: cfg.openrouter_api_key},
 }
 
 
-def configured_providers() -> List[str]:
-    return [name for name, spec in PROVIDERS.items() if _is_set(spec["key"]())]
+# Provider -> the catalogue endpoint a config points it at.
+ENDPOINTS = {
+    "openai": lambda cfg: OPENAI_API,
+    "anthropic": lambda cfg: ANTHROPIC_API,
+    "google": lambda cfg: GOOGLE_API,
+    "mistral": lambda cfg: MISTRAL_API,
+    "openrouter": _openrouter_base,
+}
+
+
+def _scope(name: str, cfg: RobinConfig) -> str:
+    """Whose catalogue a cached list is: provider, endpoint, and credential.
+
+    A list fetched with one key from one gateway belongs to that account alone.
+    The credential enters only as a SHA-256 digest, never as plaintext on disk.
+    """
+    endpoint = ENDPOINTS.get(name, lambda c: name)(cfg)
+    spec = PROVIDERS.get(name)
+    key = (spec["key"](cfg) if spec else None) or ""
+    material = "\n".join((name, str(endpoint).rstrip("/"), key)).encode("utf-8")
+    return "sha256:" + hashlib.sha256(material).hexdigest()[:32]
+
+
+def configured_providers(cfg: Optional[RobinConfig] = None) -> List[str]:
+    cfg = cfg if cfg is not None else RobinConfig.from_env()
+    return [name for name, spec in PROVIDERS.items() if _is_set(spec["key"](cfg))]
 
 
 # --- The three layers ------------------------------------------------------
 
 
 def _load_json_file(path: Path) -> Optional[dict]:
-    """Load a JSON object, or None for anything unusable.
-
-    The isinstance check is load-bearing. A file containing valid JSON that is
-    not an object (a torn write leaving "[1,2,3]", say) used to parse fine and
-    then raise AttributeError on .get, which llm_utils swallowed as "registry
-    unavailable". refresh() was never reached, so the bad file was never
-    rewritten and every cloud model stayed missing from the picker on every
-    launch until the user deleted it by hand.
-    """
+    """Load a JSON object, or None for anything unusable."""
     try:
         with path.open() as handle:
             payload = json.load(handle)
@@ -265,95 +269,194 @@ def _load_seed() -> Dict[str, List[str]]:
     return payload.get("providers", {})
 
 
-def _load_cache(ignore_ttl: bool = False) -> Optional[Dict[str, List[str]]]:
-    """The last fetched lists. `ignore_ttl` returns them however old they are.
+NEVER_FETCHED = 0.0
 
-    An expired cache is stale, not worthless: it is still a better record of
-    what a provider serves than the seed baked into the image months ago.
-    """
-    payload = _load_json_file(CACHE_PATH)
+
+def _cache_path(cfg: Optional[RobinConfig] = None) -> Path:
+    """The cache file for `cfg`: its own cache_dir when it names one."""
+    if cfg is not None and cfg.cache_dir:
+        return Path(cfg.cache_dir) / CACHE_FILENAME
+    return CACHE_PATH
+
+
+def _stamp_of(payload: Optional[dict]) -> Optional[float]:
     if not payload:
         return None
-    if not ignore_ttl and time.time() - payload.get("fetched_at", 0) > CACHE_TTL_SECONDS:
+    stamp = payload.get("fetched_at")
+    if isinstance(stamp, bool) or not isinstance(stamp, (int, float)):
         return None
+    return float(stamp)
+
+
+def _cache_fetched_at(cfg: Optional[RobinConfig] = None) -> Optional[float]:
+    """When the cache was last written from a real fetch, or None."""
+    return _stamp_of(_load_json_file(_cache_path(cfg)))
+
+
+def _cache_stamps(cfg: Optional[RobinConfig] = None) -> Dict[str, float]:
+    """When each provider last fetched successfully, for THIS configuration.
+
+    A stamp another config's fetch earned says nothing about ours, the same
+    rule the lists themselves follow."""
+    cfg = cfg if cfg is not None else RobinConfig.from_env()
+    payload = _load_json_file(_cache_path(cfg)) or {}
+    stamps = payload.get("stamps")
+    scopes = payload.get("scopes")
+    if not isinstance(stamps, dict) or not isinstance(scopes, dict):
+        return {}
+    return {name: float(ts) for name, ts in stamps.items()
+            if isinstance(ts, (int, float)) and not isinstance(ts, bool)
+            and scopes.get(name) == _scope(name, cfg)}
+
+
+def _load_cache(ignore_ttl: bool = False,
+                cfg: Optional[RobinConfig] = None) -> Optional[Dict[str, List[str]]]:
+    """The last fetched lists that belong to `cfg`. `ignore_ttl` returns them
+    however old they are."""
+    cfg = cfg if cfg is not None else RobinConfig.from_env()
+    payload = _load_json_file(_cache_path(cfg))
+    if not payload:
+        return None
+    if not ignore_ttl:
+        stamp = _stamp_of(payload)
+        if stamp is None or time.time() - stamp > CACHE_TTL_SECONDS:
+            return None
     providers = payload.get("providers")
-    return providers if isinstance(providers, dict) else None
+    scopes = payload.get("scopes")
+    if not isinstance(providers, dict) or not isinstance(scopes, dict):
+        return {}
+    # Each provider carries its own stamp, so one that failed while another
+    # succeeded is retried instead of riding the other's freshness for the TTL.
+    per_provider = isinstance(payload.get("stamps"), dict)
+    stamps = payload.get("stamps") if per_provider else {}
+    fallback = _stamp_of(payload)
+    now = time.time()
+
+    def fresh(name):
+        # A cache file with no `stamps` falls back to its one `fetched_at`; a
+        # provider absent from `stamps` never fetched.
+        own = stamps.get(name) if per_provider else fallback
+        return isinstance(own, (int, float)) and not isinstance(own, bool) \
+            and now - own <= CACHE_TTL_SECONDS
+
+    return {
+        name: models for name, models in providers.items()
+        if isinstance(scopes.get(name), str) and scopes[name] == _scope(name, cfg)
+        and (ignore_ttl or fresh(name))
+    }
 
 
-def _write_cache(providers: Dict[str, List[str]]) -> None:
+def _write_cache(providers: Dict[str, List[str]], fetched_at: float,
+                 cfg: Optional[RobinConfig] = None,
+                 stamps: Optional[Dict[str, float]] = None) -> None:
+    """Write the lists, scoped to `cfg`, with an explicit stamp."""
+    cfg = cfg if cfg is not None else RobinConfig.from_env()
+    path = _cache_path(cfg)
+    payload = {
+        "fetched_at": fetched_at,
+        "providers": providers,
+        "scopes": {name: _scope(name, cfg) for name in providers},
+        "stamps": {name: float(ts) for name, ts in (stamps or {}).items()},
+    }
+    tmp_name = None
     try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        # Write to a sibling and rename, so a crash or a full disk mid-write
-        # cannot leave a half-written cache behind.
-        tmp = CACHE_PATH.with_suffix(".tmp")
-        with tmp.open("w") as handle:
-            json.dump({"fetched_at": time.time(), "providers": providers}, handle, indent=2)
-        os.replace(tmp, CACHE_PATH)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent,
+                                         prefix=path.name + ".", suffix=".tmp",
+                                         delete=False) as handle:
+            tmp_name = handle.name
+            json.dump(payload, handle, indent=2)
+        os.replace(tmp_name, path)
+        tmp_name = None
     except OSError as exc:
         # A read-only filesystem is fine; the registry just refetches next start.
         logger.debug("Could not write model cache: %s", exc)
+    finally:
+        if tmp_name:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
 
 
-def refresh(verbose: bool = False) -> Dict[str, List[str]]:
+def refresh(cfg: Optional[RobinConfig] = None,
+            verbose: bool = False) -> Dict[str, List[str]]:
     """Fetch every configured provider and update the cache.
 
     Providers that fail keep whatever the previous layer knew about them, so one
     dead key or one unreachable API never empties the picker.
     """
+    cfg = cfg if cfg is not None else RobinConfig.from_env()
     # Seed first, then whatever we last fetched on top of it, expired or not.
-    # `_load_cache() or _load_seed()` threw the last-known lists away the moment
-    # they aged past the TTL, so a provider that failed to refresh regressed to
-    # the shipped seed and that regression was written back with a fresh
-    # timestamp, contradicting this function's own fallback promise.
+    # A provider that failed to refresh keeps its last known list.
     merged = dict(_load_seed())
-    merged.update(_load_cache(ignore_ttl=True) or {})
+    own_lists = _load_cache(ignore_ttl=True, cfg=cfg) or {}
+    merged.update(own_lists)
+    # The previous stamp is ours to keep only if the file held our lists: a
+    # stamp another config's fetch earned must not make our fallback fresh.
+    previous_fetch = _cache_fetched_at(cfg) if own_lists else None
     fetched_ok = set()
-    for name in configured_providers():
+    for name in configured_providers(cfg):
         try:
-            models = PROVIDERS[name]["fetch"]()
+            models = PROVIDERS[name]["fetch"](cfg)
             if models:
                 merged[name] = models
                 fetched_ok.add(name)
                 if verbose:
-                    print("  {:<12} {} models".format(name, len(models)))
+                    _report("  {:<12} {} models".format(name, len(models)))
             else:
                 logger.warning("Provider %s returned an empty model list.", name)
         except Exception as exc:  # noqa: BLE001 - any failure falls back a layer
+            # Redacted before it is cut: a truncated key is still a leaked one.
+            safe = redact_secrets(exc, cfg)
             logger.warning("Could not refresh %s models (%s). Using last known list.",
-                           name, str(exc)[:120])
+                           name, safe[:120])
             if verbose:
-                print("  {:<12} FAILED ({}) - using previous list".format(
-                    name, str(exc)[:60]))
-    _write_cache(merged)
+                _report("  {:<12} FAILED ({}) - using previous list".format(
+                    name, safe[:60]))
+    # `fetched_at` records a successful fetch, not an attempt: after a total
+    # failure the previous stamp stands, so an outage never looks fresh.
+    if fetched_ok:
+        stamp = time.time()
+    elif previous_fetch is not None:
+        stamp = previous_fetch
+    else:
+        stamp = NEVER_FETCHED
+    stamps = dict(_cache_stamps(cfg) if own_lists else {})
+    stamps.update({name: time.time() for name in fetched_ok})
+    _write_cache(merged, stamp, cfg, stamps=stamps)
     return merged
 
 
-def get_registry(force_refresh: bool = False) -> Dict[str, List[str]]:
+def get_registry(cfg: Optional[RobinConfig] = None,
+                 force_refresh: bool = False) -> Dict[str, List[str]]:
     """Return provider -> chat model ids, cheapest layer first."""
+    cfg = cfg if cfg is not None else RobinConfig.from_env()
     if force_refresh:
-        return refresh()
-    cached = _load_cache()
+        return refresh(cfg)
+    cached = _load_cache(cfg=cfg)
     if cached:
         # A cache written before a provider was configured has no entry for it,
-        # or only the bundled seed's. Returning it unconditionally meant that
-        # adding an API key did nothing until the TTL expired, up to 24 hours
-        # later, with the picker showing stale or seed-only models meanwhile.
-        missing = [p for p in configured_providers() if p not in cached]
+        # or only the bundled seed's. Refresh then, so a newly added API key
+        # takes effect at once rather than when the TTL expires.
+        missing = [p for p in configured_providers(cfg) if p not in cached]
         if not missing:
             return cached
         logger.info("Refreshing: %s configured since the cache was written.",
                     ", ".join(missing))
-    return refresh()
+    return refresh(cfg)
 
 
-def get_entries(force_refresh: bool = False) -> List[dict]:
+def get_entries(cfg: Optional[RobinConfig] = None,
+                force_refresh: bool = False) -> List[dict]:
     """Flatten the registry into picker entries, applying the sourcing rule.
 
     Returns dicts of ``{"key", "provider", "model_name"}``. ``key`` is what the
     UI shows and what ``resolve_model_config`` is given back.
     """
-    registry = get_registry(force_refresh=force_refresh)
-    available = set(configured_providers())
+    cfg = cfg if cfg is not None else RobinConfig.from_env()
+    registry = get_registry(cfg, force_refresh=force_refresh)
+    available = set(configured_providers(cfg))
     entries = []
 
     for provider in ("openai", "anthropic", "google", "mistral"):
@@ -382,7 +485,9 @@ def get_entries(force_refresh: bool = False) -> List[dict]:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.WARNING)
-    print("Configured providers:", ", ".join(configured_providers()) or "(none)")
-    refresh(verbose=True)
-    entries = get_entries()
-    print("\n{} models available in the picker.".format(len(entries)))
+    _cli_cfg = RobinConfig.from_env()
+    _report("Configured providers: "
+            + (", ".join(configured_providers(_cli_cfg)) or "(none)"))
+    refresh(_cli_cfg, verbose=True)
+    entries = get_entries(_cli_cfg)
+    _report("\n{} models available in the picker.".format(len(entries)))
