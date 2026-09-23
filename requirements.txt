@@ -10,3 +10,7 @@ langchain-anthropic
 langchain_community
 langchain_google_genai
 langchain-mistralai
+# Pinned exactly: 1.30.0 is the last 1.x, whose FastMCP API every MCP host and
+# doc targets. 2.x renames it to MCPServer and drops the in-memory test client
+# the MCP tests use, so upgrading is a deliberate migration.
+mcp==1.30.0

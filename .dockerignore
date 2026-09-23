@@ -1,0 +1,26 @@
+# `COPY . .` copies the whole build context, so everything below stays out of
+# the image: secrets, case data, and repo metadata the app never reads.
+
+# .env files hold API keys.
+.env
+.env.*
+# .env.example is documentation, not secrets. Last match wins, so this line
+# must follow the exclude above.
+!.env.example
+
+# Saved investigations are user data. The image pre-creates an empty
+# /app/investigations with RUN, owned by the container user.
+investigations/
+
+# Repository metadata and CI.
+.git/
+.git
+.github/
+# The UI loads this logo at runtime (ui.py: st.image) and fails without it.
+# This line must follow the .github/ exclude above.
+!.github/assets/robin_logo.png
+
+# Bytecode and caches.
+__pycache__/
+**/__pycache__/
+*.pyc
