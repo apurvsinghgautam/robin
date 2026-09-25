@@ -112,6 +112,20 @@ sets it explicitly, defaulting to 32768.
   `--add-host=host.docker.internal:host-gateway` flag is what creates it. It is
   in the README command; if you wrote your own, add it.
 
+## A blank page, or no models, after the first docker run
+
+The README's command mounts `$(pwd)/.env` into the container. If that file does
+not exist yet, Docker creates an empty folder named `.env` in its place, and
+Robin starts with no API keys. The page says `.env` is a folder, and
+`docker logs` shows a warning saying the same.
+
+Stop the container, then replace the folder with a file:
+```bash
+rmdir .env            # the empty folder Docker created
+cp .env.example .env  # or: touch .env
+```
+Add your API key to `.env`, then run the container again.
+
 ## Saved investigations fail with permission denied on Linux
 
 The container runs as UID 1000, not root. A bind mount keeps the ownership it

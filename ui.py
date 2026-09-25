@@ -5,6 +5,7 @@ import model_registry
 from contextlib import ExitStack
 from dataclasses import replace
 from datetime import datetime
+from pathlib import Path
 from scrape import scrape_multiple
 from search import engines_unreachable, get_search_results_detailed
 from llm_utils import (
@@ -163,8 +164,10 @@ if not model_options:
         _configured = model_registry.configured_providers(_robin_cfg)
     except Exception:
         _configured = []
+    # In the main area, not the sidebar: with the sidebar closed, the page would
+    # otherwise be blank.
     if _configured:
-        st.sidebar.error(
+        st.error(
             "⛔ **Could not load models for: {}.**\n\n"
             "The key is set, so this is usually the provider being unreachable: "
             "no network, an outage, or an expired key. Robin falls back to a "
@@ -172,12 +175,21 @@ if not model_options:
             "Retry once you have a connection, or add a second provider's key. "
             "See TROUBLESHOOTING.md.".format(", ".join(_configured))
         )
+    elif Path(__file__).with_name(".env").is_dir():
+        # Docker mounts a .env that does not exist yet as an empty folder.
+        st.error(
+            "⛔ **`.env` is a folder, not a file, so no API keys were loaded.**\n\n"
+            "Docker creates an empty folder when the `.env` you mount does not "
+            "exist yet. Stop Robin, delete that folder, create a `.env` file with "
+            "your API key in it (see `.env.example`), and start Robin again.\n\n"
+            "See TROUBLESHOOTING.md."
+        )
     else:
-        st.sidebar.error(
+        st.error(
             "⛔ **No LLM models available.**\n\n"
             "No API keys or local providers are configured. "
             "Set at least one in your `.env` file and restart Robin.\n\n"
-            "See **Provider Configuration** below for details."
+            "See TROUBLESHOOTING.md."
         )
     st.stop()
 

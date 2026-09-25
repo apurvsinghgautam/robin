@@ -59,6 +59,11 @@
 docker pull apurvsg/robin:latest
 ```
 
+- Create a `.env` file in the folder you run from, with your API key in it (see [`.env.example`](.env.example)). Create it before the first run: if it does not exist, Docker mounts an empty folder in its place and Robin starts with no keys.
+```bash
+touch .env   # then add your API key to it
+```
+
 - Run the docker image as:
 ```bash
 docker run --rm \

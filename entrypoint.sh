@@ -38,6 +38,12 @@ if [ -d /app/investigations ] && [ ! -w /app/investigations ]; then
   echo "WARNING: /app/investigations is not writable by UID $(id -u), so saved investigations will fail. Mount a named volume instead (-v robin-investigations:/app/investigations), or give the host folder to UID 1000 (sudo chown -R 1000:1000 <folder>). See \"Saved investigations fail with permission denied on Linux\" in TROUBLESHOOTING.md." >&2
 fi
 
+# Docker mounts a .env that does not exist yet as an empty directory, which
+# leaves every API key unset.
+if [ -d /app/.env ]; then
+  echo "WARNING: /app/.env is a directory, not a file, so no API keys were loaded. Docker creates an empty directory when the .env you mount does not exist yet. Stop the container, replace that directory with a .env file holding your API key (see .env.example), and start it again. See \"A blank page, or no models, after the first docker run\" in TROUBLESHOOTING.md." >&2
+fi
+
 if [ "$MODE" = "mcp" ]; then
   # Tor is not awaited here: an MCP host expects an `initialize` reply within
   # seconds, and Tor takes ten to sixty to bootstrap. Until Tor has

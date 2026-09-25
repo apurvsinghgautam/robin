@@ -66,6 +66,15 @@ class ThePageRunsThePipeline(unittest.TestCase):
         self.assertIn('tor_result["status"] == "down"', SOURCE)
         self.assertIn('tor_result["status"] != "up"', SOURCE)
 
+    def test_a_page_with_no_models_explains_itself_in_the_main_area(self):
+        """A collapsed sidebar would otherwise leave a blank page, and a .env
+        that Docker mounted as a folder gets its own message."""
+        start = SOURCE.index("if not model_options:")
+        block = SOURCE[start:SOURCE.index("st.stop()", start)]
+        self.assertNotIn("st.sidebar.", block)
+        self.assertEqual(block.count("st.error("), 3)
+        self.assertIn('with_name(".env").is_dir()', block)
+
 class _FakeCache:
     """`st.cache_data` with a per-arguments `.clear`, recording every real call."""
 
