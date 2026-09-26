@@ -7,7 +7,7 @@
    <h1>Robin: AI-Powered Dark Web OSINT Tool</h1>
 
    <p>Robin is an AI-powered tool for conducting dark web OSINT investigations. It leverages LLMs to refine queries, filter search results from dark web search engines, and provide an investigation summary.</p>
-   <a href="#installation">Installation</a> &bull; <a href="#troubleshooting">Troubleshooting</a> &bull; <a href="#contributing">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
+   <a href="#installation">Installation</a> &bull; <a href="#robin-as-mcp">Robin as MCP</a> &bull; <a href="TROUBLESHOOTING.md">Troubleshooting</a> &bull; <a href="CONTRIBUTING.md">Contributing</a> &bull; <a href="#acknowledgements">Acknowledgements</a><br><br>
 </div>
 
 ![Demo](.github/assets/screen-ui.png)
@@ -20,17 +20,12 @@
 
 ## Features
 
-- ⚙️ **Modular Architecture** – Clean separation between search, scrape, and LLM workflows.
 - 🤖 **Multi-Model Support** – OpenAI, Claude, Gemini, Mistral, OpenRouter, Ollama, or any OpenAI-compatible API (LM Studio, llama.cpp, Groq, etc.).
-- 🔄 **Live Model List** – Models are discovered from each provider at startup, so new releases appear on their own and retired ones disappear. No hardcoded list to go stale.
-- 🎚️ **Tunable Depth** – Sidebar controls for how many results to filter, how many pages to scrape, and how much of each page the model reads, with the token cost shown before you run.
 - 🌐 **Web UI** – Streamlit-based interface for interactive investigations.
-- 💬 **Conversational Follow-ups** – Ask grounded follow-up questions about an investigation without re-running the search — answered from that investigation's own data.
+- 🔌 **MCP Support** – Run Robin from any MCP-capable agent, using that agent's own model. See [Robin as MCP](#robin-as-mcp).
+- 💬 **Conversational Follow-ups** – Ask grounded follow-up questions about an investigation without re-running the search, answered from that investigation's own data.
 - 🔀 **One-Click Pivots** – Suggested follow-up queries surfaced from the findings; click one to launch a fresh investigation.
 - 🐳 **Docker-Ready** – Recommended Docker deployment for clean, isolated usage.
-- 🔍 **Honest Results** – When nothing relevant is found, Robin says so instead of summarizing whatever it happened to scrape.
-- 📝 **Custom Reporting** – Save investigation output to file for reporting or further analysis.
-- 🧩 **Extensible** – Easy to plug in new search engines, models, or output formats.
 
 ---
 
@@ -53,7 +48,7 @@
 > 1. Run the container with `--add-host=host.docker.internal:host-gateway` (the README command already does).
 > 2. Make Ollama listen on all interfaces, since it binds to `127.0.0.1` by default and a container cannot reach that. If you start it yourself, `OLLAMA_HOST=0.0.0.0 ollama serve &`. If it runs under systemd, `sudo systemctl edit ollama.service`, add `[Service]` and `Environment="OLLAMA_HOST=0.0.0.0"`, then `sudo systemctl daemon-reload && sudo systemctl restart ollama`.
 >
-> Running Robin directly with Python instead of Docker? Add `OLLAMA_BASE_URL=http://127.0.0.1:11434` to override the default. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if it still doesn't appear.
+> See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if it still doesn't appear.
 >
 > For any other OpenAI-compatible provider (LM Studio, llama.cpp, Groq, etc.), use the **🔌 Custom API Provider** expander in the sidebar — no `.env` changes required. Enter the base URL, an optional API key, and optionally a model name if the provider doesn't expose `/v1/models` for auto-discovery.
 
@@ -62,6 +57,11 @@
 - Pull the latest Robin docker image
 ```bash
 docker pull apurvsg/robin:latest
+```
+
+- Create a `.env` file in the folder you run from, with your API key in it (see [`.env.example`](.env.example)). Create it before the first run: if it does not exist, Docker mounts an empty folder in its place and Robin starts with no keys.
+```bash
+touch .env   # then add your API key to it
 ```
 
 - Run the docker image as:
@@ -74,7 +74,18 @@ docker run --rm \
 ```
 
 > [!TIP]
-> To persist saved investigations across Docker restarts, mount a local directory:
+> To persist saved investigations across Docker restarts, mount a named volume or a local directory at `/app/investigations`.
+>
+> A named volume works the same on every OS and needs no host path. It is also the volume the agent commands in [Robin as MCP](#robin-as-mcp) mount, so the UI shows the same reports your agent saved:
+> ```bash
+> docker run --rm \
+>    -v "$(pwd)/.env:/app/.env" \
+>    -v robin-investigations:/app/investigations \
+>    --add-host=host.docker.internal:host-gateway \
+>    -p 8501:8501 \
+>    apurvsg/robin:latest
+> ```
+> Or mount a local directory, if you want the JSON files on your own disk:
 > ```bash
 > docker run --rm \
 >    -v "$(pwd)/.env:/app/.env" \
@@ -84,36 +95,167 @@ docker run --rm \
 >    apurvsg/robin:latest
 > ```
 > Investigations are saved to the `investigations/` folder in your working directory and can be loaded from the **Past Investigations** panel in the sidebar.
+>
+> Create the folder yourself first (`mkdir -p investigations`) so Docker does not create it as root. The container runs as UID 1000, and on Linux a folder owned by anyone else is read-only to it — Robin prints one warning and the save fails, though the investigation still runs. If you hit that, or your own UID isn't 1000, use the named volume above, or see [Saved investigations fail with permission denied on Linux](TROUBLESHOOTING.md#saved-investigations-fail-with-permission-denied-on-linux).
 
 - Open your browser and navigate to `http://localhost:8501`
 
-### Using Python (Development Version)
+### Build it yourself
 
-- With `Python 3.10+` and Tor installed, run the following:
+To run your own build instead of the published image, clone the repository and
+build it:
 
 ```bash
-pip install -r requirements.txt
-streamlit run ui.py
+docker build -t robin .
+```
+
+Then use the same run commands with `robin` in place of `apurvsg/robin:latest`:
+
+```bash
+docker run --rm \
+   -v "$(pwd)/.env:/app/.env" \
+   --add-host=host.docker.internal:host-gateway \
+   -p 8501:8501 \
+   robin
+```
+
+```bash
+docker run --rm \
+   -v "$(pwd)/.env:/app/.env" \
+   -v "$(pwd)/investigations:/app/investigations" \
+   --add-host=host.docker.internal:host-gateway \
+   -p 8501:8501 \
+   robin
 ```
 
 - Open your browser and navigate to `http://localhost:8501`
 
 ---
 
-## Troubleshooting
+## Robin as MCP
 
-Empty model dropdown, Ollama not showing up, Tor `resolve failed` errors, 401s,
-or "no results found"? See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** before
-opening an issue.
+Any LLM service that speaks MCP can run it, using its own model. The sections
+below are worked examples for the common hosts; a host that is not listed works
+the same way, with whatever wording it uses for "add an MCP server".
 
----
+### Claude Code
 
-## Contributing
+```bash
+claude mcp add robin -- docker run -i --rm -v robin-investigations:/app/investigations apurvsg/robin mcp
+```
 
-Bugs go in [Issues](https://github.com/apurvsinghgautam/robin/issues). Questions
-and feature ideas go in
-[Discussions](https://github.com/apurvsinghgautam/robin/discussions). See
-**[CONTRIBUTING.md](CONTRIBUTING.md)** before opening a pull request.
+Or check it into the project in `.mcp.json`. A Tor investigation takes minutes,
+so raise the per-server timeout:
+
+```json
+{
+  "mcpServers": {
+    "robin": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "robin-investigations:/app/investigations", "apurvsg/robin", "mcp"],
+      "timeout": 600000
+    }
+  }
+}
+```
+
+### Codex
+
+```bash
+codex mcp add robin -- docker run -i --rm -v robin-investigations:/app/investigations apurvsg/robin mcp
+```
+
+The ChatGPT desktop app shares this host: adding Robin under **Settings → MCP
+servers** there writes the same configuration, and its tools appear in Codex
+sessions rather than in an ordinary ChatGPT chat.
+
+A Tor search usually takes a couple of minutes, which can outlast Codex's default
+MCP tool timeout, so raise the limits in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.robin]
+command = "docker"
+args = ["run", "-i", "--rm", "-v", "robin-investigations:/app/investigations", "apurvsg/robin", "mcp"]
+tool_timeout_sec = 600
+startup_timeout_sec = 60
+
+# Only for non-interactive runs (`codex exec`): Codex declines MCP tool calls
+# that would need approval, so pre-approve Robin's read-only tools.
+default_tools_approval_mode = "approve"
+```
+
+Pull the image first (`docker pull apurvsg/robin:latest`) so the first start is
+not also a download.
+
+### Claude Desktop
+
+Add this to `claude_desktop_config.json` and restart the app:
+
+```json
+{
+  "mcpServers": {
+    "robin": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "robin-investigations:/app/investigations", "apurvsg/robin", "mcp"]
+    }
+  }
+}
+```
+
+### Hermes
+
+In `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  robin:
+    command: docker
+    args: [run, -i, --rm, -v, "robin-investigations:/app/investigations", apurvsg/robin, mcp]
+    timeout: 600
+```
+
+### OpenClaw
+
+```bash
+openclaw mcp add robin --command docker --arg run --arg -i --arg --rm --arg -v --arg robin-investigations:/app/investigations --arg apurvsg/robin --arg mcp
+```
+
+Or in the config, under `mcp.servers`:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "robin": {
+        "transport": "stdio",
+        "command": "docker",
+        "args": ["run", "-i", "--rm", "-v", "robin-investigations:/app/investigations", "apurvsg/robin", "mcp"],
+        "requestTimeoutMs": 600000
+      }
+    }
+  }
+}
+```
+
+### ChatGPT
+
+The desktop app's **Settings → MCP servers** configures the Codex host that the
+app, the Codex CLI and the IDE extension share, so add Robin there and it
+appears in Codex sessions: see [Codex](#codex). An ordinary ChatGPT chat cannot
+run it, because chat reaches MCP servers through connectors that run in OpenAI's
+infrastructure rather than on your machine.
+
+### Security
+
+- Nothing sends, executes, or runs a shell. The only writes are saved reports,
+  into `investigations/` under a filename Robin picks; the agent never names a
+  path.
+- Searches, page scrapes and search-engine health checks go through Tor, so the
+  app you are using never fetches a dark web page itself. Model provider calls
+  and the model list refresh go directly, not through Tor.
+- Scraped text comes back inside untrusted-data delimiters, with control,
+  zero-width and bidi characters stripped first, so your model reads it as
+  evidence rather than as instructions.
 
 ---
 

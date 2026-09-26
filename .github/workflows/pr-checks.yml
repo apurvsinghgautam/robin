@@ -1,20 +1,17 @@
 name: PR Checks
 
-# Runs before anything reaches main. Pushing to main publishes a GitHub release
-# and a :latest Docker image automatically, so this is the only gate between a
-# change and users pulling it.
+# The only gate before main: every push to main publishes a GitHub release and
+# a :latest Docker image.
 on:
-  # Any branch except main, so a plain `git push` of a feature branch is checked
-  # without needing a PR open yet.
+  # Any branch except main, so a feature branch is checked before a PR exists.
   push:
     branches-ignore: [ main ]
-  # And again on the PR itself, which is what a branch protection rule can
-  # require before the merge button unlocks.
+  # The PR run is the check a branch protection rule can require before merging.
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
-# A branch push and its PR would otherwise duplicate the run.
+# A newer run for the same ref cancels the one still in progress.
 concurrency:
   group: pr-checks-${{ github.ref }}
   cancel-in-progress: true
@@ -26,11 +23,11 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.10"
+          python-version: "3.11"
           cache: pip
 
       - name: Install dependencies
@@ -43,14 +40,14 @@ jobs:
         run: python -m compileall -q .
 
       - name: Lint for undefined names and unused imports
-        run: python -m pyflakes *.py
+        run: python -m pyflakes *.py tests/*.py
 
       - name: Import every module
         # Catches circular imports, bad top-level code, and missing
         # dependencies that compileall cannot see. ui.py is excluded because
         # importing it executes the Streamlit script.
         run: |
-          for module in config llm llm_utils model_registry scrape search health; do
+          for module in config prompts llm llm_utils model_registry scrape search health pipeline store mcp_server; do
             echo "importing $module"
             python -c "import $module"
           done
@@ -70,8 +67,7 @@ jobs:
           PY
 
       - name: Registry works with no API keys configured
-        # The failure mode this guards: a user with one key, or none, must still
-        # get a usable app rather than a crash.
+        # A user with no API keys must still get a usable app, not a crash.
         env:
           OPENAI_API_KEY: ""
           ANTHROPIC_API_KEY: ""
@@ -106,3 +102,8 @@ jobs:
           assert len(keys) == 3, keys
           print("search parser OK")
           PY
+
+      - name: Regression tests
+        # Stdlib unittest on purpose: users install from requirements.txt, so the
+        # tests add no test-runner dependency to it.
+        run: python -m unittest discover -s tests -t . -v

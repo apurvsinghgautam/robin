@@ -5,8 +5,9 @@ provider isn't configured the way Robin expects, the model list is stale, or the
 dark web genuinely had nothing to say about your query. Work through the section
 that matches what you're seeing.
 
-If none of this helps, open an issue and include the Robin version, how you're
-running it (Docker or local), the provider you selected, and the console output.
+If none of this helps, open an issue and include the Robin version, whether you
+use the web UI or the MCP server, the provider you selected, and the console
+output.
 
 ---
 
@@ -33,9 +34,7 @@ empty dropdown means it found no keys at all.
 
 This is almost always the container being unable to reach Ollama on the host.
 
-1. In `.env`, set `OLLAMA_BASE_URL=http://host.docker.internal:11434` when
-   running under Docker. Use `http://127.0.0.1:11434` only when running Robin
-   directly on the host.
+1. In `.env`, set `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
 2. Run the container with `--add-host=host.docker.internal:host-gateway`.
 3. Serve Ollama on all interfaces, not just loopback. Ollama binds to
    `127.0.0.1` by default, which a container cannot reach no matter what
@@ -68,8 +67,8 @@ This is almost always the container being unable to reach Ollama on the host.
 
 ## "Model not found", "this model is out of date", or a failing connection check
 
-Providers retire models. From v2.9 Robin no longer ships a hardcoded model list;
-it asks each provider what it currently serves and caches the answer.
+Providers retire models, so Robin keeps no hardcoded model list: it asks each
+provider what it currently serves and caches the answer.
 
 - Restart Robin to force a refresh. The container refreshes on start.
 - Delete the cache to force a rebuild: remove `~/.robin/models_cache.json`, or
@@ -89,7 +88,7 @@ it asks each provider what it currently serves and caches the answer.
 
 Ollama applies its own context window rather than the model's full capability,
 so a 128k-capable model can still be truncated to a few thousand tokens. Robin
-now sets it explicitly, defaulting to 32768.
+sets it explicitly, defaulting to 32768.
 
 - Lower it if your machine is short on RAM: `OLLAMA_NUM_CTX=8192` in `.env`.
 - Keep it above the budget you asked for. The sidebar caption under **Content
@@ -113,6 +112,65 @@ now sets it explicitly, defaulting to 32768.
   `--add-host=host.docker.internal:host-gateway` flag is what creates it. It is
   in the README command; if you wrote your own, add it.
 
+## A blank page, or no models, after the first docker run
+
+The README's command mounts `$(pwd)/.env` into the container. If that file does
+not exist yet, Docker creates an empty folder named `.env` in its place, and
+Robin starts with no API keys. The page says `.env` is a folder, and
+`docker logs` shows a warning saying the same.
+
+Stop the container, then replace the folder with a file:
+```bash
+rmdir .env            # the empty folder Docker created
+cp .env.example .env  # or: touch .env
+```
+Add your API key to `.env`, then run the container again.
+
+## Saved investigations fail with permission denied on Linux
+
+The container runs as UID 1000, not root. A bind mount keeps the ownership it
+has on your host, so if the directory you mounted at `/app/investigations`
+belongs to a different user, Robin cannot write into it. You will see one line
+like this at startup:
+
+```
+WARNING: /app/investigations is not writable by UID 1000, so saved investigations will fail.
+```
+
+The investigation itself still runs and the report still renders in the
+browser. Only the save to disk fails.
+
+This is a Linux-only problem. Docker Desktop on macOS and Windows maps the
+mount to whoever is running the container, so there is nothing to fix there.
+
+Two fixes work. Pick one:
+
+- **Use a named volume instead of a folder.** Docker creates it owned by the
+  container's user, so there is nothing to get wrong, on any OS. It is also
+  the volume the agent commands in the README mount, so the UI and your agent
+  see the same reports:
+  ```bash
+  docker run --rm \
+     -v "$(pwd)/.env:/app/.env" \
+     -v robin-investigations:/app/investigations \
+     --add-host=host.docker.internal:host-gateway \
+     -p 8501:8501 \
+     apurvsg/robin:latest
+  ```
+- **Keep the folder, and give it to UID 1000.** This is the fix when you want
+  the JSON files on your own disk. It usually means Docker created the folder
+  as root, because the path you passed to `-v` did not exist yet:
+  ```bash
+  sudo chown -R 1000:1000 investigations
+  ```
+  Your own account can still read the files. To write into the folder from
+  the host as well, add yourself to a group that owns it, or copy the files
+  out.
+
+Do not run the container as a different user with `--user`. Tor keeps its
+state in `/home/robin/.tor`, which is private to UID 1000, so under any other
+UID Tor cannot start and Robin never gets past "Waiting for Tor".
+
 ## Reports feel thin, or an investigation costs more than expected
 
 Two sidebar sliders decide how much the model actually reads, and the caption
@@ -132,12 +190,10 @@ multiplies the per-page budget.
 
 ## Why does an engine appear in my results?
 
-It shouldn't, and from v2.9 it doesn't. Robin drops any result pointing at one
-of the 16 search engines it queries, and unwraps engine redirect links to the
-real target underneath. Earlier versions collected every `.onion` link on the
-page, including the engine's own navigation, categories, adverts and footer, so
-reports could be written from a search engine's menu. If you still see one,
-please open an issue with the query and the engine.
+It shouldn't. Robin drops any result pointing at one of the 16 search engines it
+queries, ignores an engine's own navigation links, and unwraps engine redirect
+links to the real target underneath. If you still see one, please open an issue
+with the query and the engine.
 
 ## 401 / "User not found" / authentication errors
 
@@ -155,8 +211,10 @@ please open an issue with the query and the engine.
 Robin routes `.onion` traffic through `socks5h://127.0.0.1:9050` and lets Tor do
 the hostname resolution. It cannot work without a running Tor.
 
-**Tor never finishes bootstrapping.** Wait for `Bootstrapped 100% (done)` in the
-logs before running a search. On a slow connection this takes a minute or two.
+**Tor never finishes bootstrapping.** Tor writes its progress to a log file
+inside the container rather than to `docker logs`. Check it with
+`docker exec <container> grep Bootstrapped /home/robin/tor-notices.log` and wait
+for `Bootstrapped 100% (done)`. On a slow connection this takes a minute or two.
 
 **`Closed N streams for service [scrubbed].onion for reason resolve failed.
 Fetch status: No more HSDir available to query.`** This is Tor saying the hidden
@@ -181,28 +239,126 @@ as permanently dead.
 
 ## "No results found" instead of a report
 
-From v2.9 Robin stops and tells you when a search returns nothing relevant,
-rather than summarizing whatever links it happened to hold. Earlier versions
-would fall back to the top raw links, which produced confident reports written
-from search engine navigation pages.
+Robin stops and says so when there is nothing to report from, rather than
+summarizing whatever links it happened to hold. There are four stops, and the
+MCP server returns the same four as a `status`:
 
-If you're seeing this more than you expect:
+- **"No search engine answered, so nothing was searched."**
+  (`engines_unreachable`) This is an outage, not an empty dark web. Run
+  **Check Search Engines**, confirm Tor has bootstrapped, and run the query
+  again; an outage is never served from the cache.
+- **"No dark web results came back for this query."** (`no_results`) The
+  engines answered with nothing. Very specific identifiers often have no dark
+  web presence at all, and that is a real answer. Try broader terms.
+- **"Found N raw links, but none of them matched this query."**
+  (`nothing_relevant`) The model judged every result off topic. Try a
+  different phrasing, or raise **Max Results to Filter** to give it more
+  candidates.
+- **"Found N relevant results, but none of the pages could be read over Tor
+  right now."** (`nothing_readable`) Every kept page timed out or refused the
+  connection. Onion services go up and down; retry in a few minutes, or raise
+  **Max Pages to Scrape** so more candidates get a chance. Through the MCP
+  server the reply carries the kept links, so your agent can retry them with
+  `robin_scrape`.
 
-- Broaden the query. Very specific identifiers often have no dark web presence
-  at all, and that is a real answer.
-- Non-English results are supported. Earlier versions discarded Cyrillic, CJK
-  and Arabic titles at the search layer; from v2.9 they are kept.
-- Check how many engines responded. If only one or two did, coverage is thin.
-- Raise **Max Results to Filter** in the sidebar to give the filtering model
-  more candidates to work with.
+Non-English titles (Cyrillic, CJK, Arabic) are kept, so a query in another
+language is fine.
+
+## The agent says the MCP server produced invalid output
+
+In stdio mode the container's stdout *is* the wire: it carries nothing but
+JSON-RPC. Anything else printed there — a stray `print()`, a library banner, a
+warning that went to stdout instead of stderr — lands in the middle of a message
+and the host rejects the whole exchange.
+
+Robin's own modules write nothing to stdout. Every log line, every warning, and
+the entrypoint's startup messages go to stderr instead, so:
+
+- Look at stderr, not at the chat transcript. `docker logs <container>` while the
+  container is alive, or start the same command in a terminal by hand and watch
+  the second stream. Most hosts also keep a per-server MCP log.
+- If you are running a fork or a local build, grep your changes for `print(`.
+  Use `logging` instead; it goes to stderr.
+- Confirm you passed `-i`. Without it the container has no stdin, the server has
+  nothing to read, and the host reports a broken server rather than a missing
+  flag.
+
+## Robin says it has no model of its own
+
+Three replies say this, and none of them is an error. Robin runs a model only
+when your client offers MCP sampling or you configured one; most hosts do
+neither, and the tools-and-prompts workflow is designed for exactly that.
+
+- **`status: refine_it_yourself`** from `robin_refine`. Robin hands back the
+  refiner's own rules and you write the query. Your host is a model, so this
+  costs nothing.
+- **`status: unfiltered`** from `robin_filter`. Robin judged nothing, so it
+  dropped nothing: every result comes back and every one is scrapeable. The
+  reply carries the filter's own rules and tells the host to run that pass
+  before scraping, so the step still happens, on the host's model instead of
+  Robin's.
+- **`status: needs_domain`** from `robin_search`. Not about models at all: the
+  research domain is the user's to choose, so nothing is searched until they
+  have. Ask them, then pass `preset` with `user_chose=true`.
+
+To have Robin judge relevance itself, give the container a provider key in its
+environment (and `ROBIN_MODEL` to pick the model), or use a client that
+supports sampling. With one, `robin_filter` returns only the results it
+judges on topic, most relevant first.
+
+## ChatGPT cannot connect, or the tools never appear in a chat
+
+ChatGPT has two MCP surfaces and they are not interchangeable.
+
+**Settings → MCP servers** (desktop app) configures the Codex host, shared with
+the Codex CLI and the IDE extension. Robin starts fine there — you will see its
+Tor lines — but its tools appear in Codex sessions, not in an ordinary chat.
+Raise `tool_timeout_sec` in `~/.codex/config.toml`: a Tor search outlasts the
+default.
+
+**Connectors** (*Settings → Apps & Connectors*) are what an ordinary chat uses.
+They run in OpenAI's infrastructure and cannot start or reach a server on your
+machine, so Robin cannot be one. Use the Codex surface above instead.
+
+If tools are listed but a call never runs, check the client's approval policy.
+A policy set never to ask also never approves, so the call is declined before
+it reaches Robin.
+
+## Tools report tor_bootstrapping
+
+Tor starts with the container and needs time to build its first circuits. The MCP
+server answers `initialize` straight away so your host does not time out waiting
+for it, which means a tool can be called before Tor is ready. Until Tor reports
+`Bootstrapped 100%`, every Tor-dependent tool reports `tor_bootstrapping` and
+asks you to retry, rather than return an empty result that reads like "nothing
+found". Nothing is searched or fetched while it says so.
+
+Wait a few seconds and call again; `robin_health` shows `tor: up` once it is
+ready. On a slow connection that takes a minute or two. If it never clears, the
+problem is Tor rather than Robin — see **Tor problems** above.
+
+## Claude Code truncates the tool output
+
+Claude Code caps MCP tool results at 25,000 tokens by default and warns at
+10,000. A generous scrape is the usual cause: ten pages at 8,000 characters is
+roughly 20,000 tokens before anything else is added.
+
+- Raise the cap with `MAX_MCP_OUTPUT_TOKENS` in the environment Claude Code runs
+  in.
+- Or ask for less per call. Lower **Content per Page** (`content_chars`), or pass
+  fewer page ids to each `robin_scrape` call. For Claude Code, Robin bounds one
+  call's output at 60,000 characters anyway and tells you which pages fit, so
+  splitting a scrape across two calls costs nothing but the second call. If you
+  raised `MAX_MCP_OUTPUT_TOKENS`, have your agent pass a larger `max_chars` so
+  Robin's bound moves with it; `max_chars=0` removes it.
 
 ## Reporting a bug
 
 Include:
 
-- Robin version, and whether you're on Docker or a local install
+- Robin version, and whether you use the web UI or the MCP server (and which host)
 - The provider and model you selected
-- Whether Tor reached `Bootstrapped 100%`
+- Whether Tor reached `Bootstrapped 100%` (see **Tor problems** for how to check)
 - The output of **Check Search Engines**
 - The full error text, not a screenshot crop
 - The **Content per Page** and **Max Pages to Scrape** values you were using

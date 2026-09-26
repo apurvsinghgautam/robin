@@ -1,0 +1,48 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.apurvsinghgautam/robin",
+  "title": "Robin: AI-Powered Dark Web OSINT",
+  "description": "Dark web OSINT over Tor: search onion engines, scrape pages, report with your own model.",
+  "version": "3.0.0",
+  "repository": {
+    "url": "https://github.com/apurvsinghgautam/robin",
+    "source": "github",
+    "id": "962685604"
+  },
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "docker.io/apurvsg/robin:v3.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "docker",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-i",
+          "description": "Keep stdin open. The stdio transport is a JSON-RPC conversation on the container's stdin and stdout."
+        },
+        {
+          "type": "named",
+          "name": "--rm",
+          "description": "Remove the container when the host disconnects. Robin keeps nothing in the container itself; saved investigations live in the volume below."
+        },
+        {
+          "type": "named",
+          "name": "-v",
+          "value": "robin-investigations:/app/investigations",
+          "description": "Keep saved investigations in the named Docker volume robin-investigations, so they survive --rm and any Robin container that mounts the same volume, the Streamlit UI included, sees them."
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "command",
+          "value": "mcp",
+          "description": "Start the MCP server. With no command the same image serves the Streamlit UI on 8501 instead."
+        }
+      ]
+    }
+  ]
+}

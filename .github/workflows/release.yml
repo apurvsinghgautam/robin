@@ -1,11 +1,16 @@
 name: Create Release
 
+# The release and the Docker image come from one workflow so both use a version
+# computed once, as a job output; separate workflows, even a `workflow_run`
+# chain, would each re-derive it. `[no ci]` in the commit message skips the run.
+
 on:
   push:
     branches: [ main ]
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   create-release:
@@ -13,22 +18,20 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.new_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Determine Version
         id: version
         run: |
-          # Get the latest version tag, default to v0.1 if none exists
+          # Get the latest version tag, or v0.0 if none exists.
           LATEST_TAG=$(gh release list -L 1 | cut -f 1 | sed 's/Release //' || echo "v0.0")
           LATEST_TAG=${LATEST_TAG:-v0.0}
 
-          # Extract current version numbers
           MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | sed 's/v//')
           MINOR=$(echo $LATEST_TAG | cut -d. -f2)
 
-          # Check commit message for version bump
           if git log -1 --pretty=%B | grep -i "version bump"; then
             NEW_VERSION="v$((MAJOR + 1)).0"
           else
@@ -54,14 +57,83 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  publish:
+  docker:
     needs: create-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: apurvsg
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # The MCP registry points at this image, so provenance and an SBOM
+          # make the commit that built it answerable from the image alone.
+          provenance: true
+          sbom: true
+          # The version tag is the release tag verbatim, leading v included, so
+          # the image tag, the GitHub release and the git tag are one string.
+          tags: |
+            apurvsg/robin:latest
+            apurvsg/robin:${{ needs.create-release.outputs.version }}
+
+  publish:
+    needs: [create-release, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Publish Release
         run: |
           gh release edit "${{ needs.create-release.outputs.version }}" --draft=false
         env:
           GH_TOKEN: ${{ github.token }}
+
+  mcp-registry:
+    needs: [create-release, docker]
+    runs-on: ubuntu-latest
+    # The registry reads the repository from GitHub's OIDC token, so no secret is
+    # needed. It pulls the image to check its label, so this job needs the push.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Stamp server.json with this release
+        env:
+          VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          jq --arg version "${VERSION#v}.0" --arg image "docker.io/apurvsg/robin:$VERSION" \
+            '.version = $version | .packages[0].identifier = $image' \
+            server.json > server.tmp && mv server.tmp server.json
+          cat server.json
+
+      - name: Publish to the MCP Registry
+        run: |
+          # A published version is immutable, so a re-run skips it rather than failing.
+          name=$(jq -r .name server.json | sed 's#/#%2F#g')
+          version=$(jq -r .version server.json)
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://registry.modelcontextprotocol.io/v0.1/servers/$name/versions/$version")
+          if [ "$status" = 200 ]; then
+            echo "$version is already in the MCP Registry."
+            exit 0
+          fi
+          curl -sSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
