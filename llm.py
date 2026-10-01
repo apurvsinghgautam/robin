@@ -4,6 +4,7 @@ import openai
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from llm_utils import ChatOpenAI, _common_llm_params, resolve_model_config, get_model_choices, response_text
 from config import RobinConfig
+from evidence import build_evidence, evidence_input, render_report
 from scrape import fence_overhead, fence_untrusted
 # Prompt text lives in prompts.py, so the MCP server serves the exact words
 # this module sends.
@@ -14,6 +15,7 @@ from prompts import (
     PIVOTS_SYSTEM_PROMPT,
     PRESET_PROMPTS,
     REFINE_SYSTEM_PROMPT,
+    grounding_selection_prompt,
 )
 from typing import Optional
 import logging
@@ -302,19 +304,37 @@ def _generate_final_string(results, truncate=False):
 
 
 def generate_summary(llm, query, content, preset="threat_intel", custom_instructions=""):
+    return generate_summary_detailed(llm, query, content, preset, custom_instructions)[0]
+
+
+def generate_summary_detailed(llm, query, content, preset="threat_intel", custom_instructions=""):
+    """One model selection call, followed by deterministic source matching and rendering."""
+    preset = preset if preset in PRESET_PROMPTS else "threat_intel"
     system_prompt = PRESET_PROMPTS.get(preset, PRESET_PROMPTS["threat_intel"])
-    invoke_vars = {"query": query, "content": _flatten_scraped(content)}
+    index = build_evidence(_scraped_pages(content))
+    invoke_vars = {"query": query, "content": evidence_input(index),
+                   "grounding_contract": grounding_selection_prompt(preset)}
     if custom_instructions and custom_instructions.strip():
         # Append as a template placeholder filled by an invoke value, so literal
         # braces the user typed in Custom Instructions aren't misread as
         # prompt-template variables (same safe pattern as answer_followup).
         system_prompt = system_prompt.rstrip() + "\n\nAdditionally focus on: {custom_focus}"
         invoke_vars["custom_focus"] = custom_instructions.strip()
+    system_prompt = system_prompt.rstrip() + "\n\n{grounding_contract}"
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{content}")]
     )
     chain = prompt_template | llm | response_text
-    return chain.invoke(invoke_vars)
+    # Selection JSON is a draft; callbacks must never release it as a report.
+    callbacks = getattr(llm, "callbacks", None)
+    if hasattr(llm, "callbacks"):
+        llm.callbacks = []
+    try:
+        raw = chain.invoke(invoke_vars)
+    finally:
+        if hasattr(llm, "callbacks"):
+            llm.callbacks = callbacks
+    return render_report(query, raw, index, preset)
 
 
 # --- Conversational follow-up ---

@@ -82,11 +82,17 @@ def evaluate(model, cfg, llm_factory=None):
                 row["link"]: PAGES[row["link"]] for row in selected if row["link"] in PAGES},
         )
         outputs.update(refined=inv.refined, selected=inv.filtered,
-                       report=inv.summary, pivots=inv.pivots, status=inv.status)
+                       report=inv.summary, pivots=inv.pivots, status=inv.status,
+                       evidence_check=inv.evidence_check)
         checks["identifiers_preserved"] = all(value in inv.refined for value in (CVE, HASH, EMAIL))
         checks["relevant_selection"] = {r["link"] for r in inv.filtered} == set(PAGES)
         checks["completed_report"] = inv.status == pipeline.STATUS_OK and bool(inv.summary.strip())
         checks.update(report_checks(inv.summary))
+        mappings = {item["value"]: item["sources"]
+                    for item in inv.evidence_check.get("artifact_sources", [])}
+        checks["hash_source_mapping"] = mappings.get(HASH) == [SOURCE]
+        checks["email_source_mapping"] = set(mappings.get(EMAIL, [])) == set(PAGES)
+        checks["source_matched_report"] = inv.evidence_check.get("status") == "source_matched"
         checks["usable_pivots"] = bool(inv.pivots) and all(isinstance(p, str) for p in inv.pivots)
 
         selected, raw = llm.filter_results_detailed(build(), QUERY, [RESULTS[0], RESULTS[2]], limit=2)

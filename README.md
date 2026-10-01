@@ -245,6 +245,20 @@ appears in Codex sessions: see [Codex](#codex). An ordinary ChatGPT chat cannot
 run it, because chat reaches MCP servers through connectors that run in OpenAI's
 infrastructure rather than on your machine.
 
+### Evidence grounding
+
+Robin extracts recognized technical identifiers and records the pages where
+they appear. The report model selects source passages; Robin renders their
+exact text and URLs, keeping proposed actions separate from findings. Invalid
+references are omitted, and malformed report selections fail without displaying
+or saving the unchecked draft. The report appears after these checks finish.
+
+When driving the MCP tools yourself, save the evidence-selection JSON requested
+by `robin_scrape` as `summary`; Robin returns the checked Markdown report.
+Markdown imported without page evidence in the current session is marked as
+unchecked. Source matching confirms what the supplied excerpts say, rather than
+independently verifying those claims.
+
 ### Security
 
 - Nothing sends, executes, or runs a shell. The only writes are saved reports,

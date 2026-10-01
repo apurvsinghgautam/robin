@@ -1,6 +1,7 @@
 """llm.py's selection parsing and prompts, and a core that never writes to stdout."""
 import contextlib
 import io
+import json
 import tempfile
 import unittest
 from unittest import mock
@@ -11,6 +12,7 @@ import openai
 import llm
 import model_registry
 import prompts
+from evidence import build_evidence
 from config import RobinConfig
 from llm_utils import BufferedStreamingHandler
 from tests.mcp_harness import results
@@ -249,8 +251,12 @@ class ReasoningResponses(unittest.TestCase):
                 self.assertEqual(reply, "2, 4")
                 self.assertEqual(llm.filter_results(self.model("", blocks), "acme", found), [])
                 content = {found[1]["link"]: "Acme leak listing. Contact: analyst@example.com."}
-                report = "## Findings\n- analyst@example.com appears in the supplied listing."
-                self.assertEqual(llm.generate_summary(self.model(report, blocks), "acme", content), report)
+                key = next(iter(build_evidence(content.items())["passages"]))
+                selection = json.dumps({"sections": {"Key Insights": [key]}, "next_steps": []})
+                report = llm.generate_summary(self.model(selection, blocks), "acme", content)
+                self.assertIn("analyst@example.com", report)
+                self.assertIn(found[1]["link"], report)
+                self.assertNotIn("Consider indices", report)
                 self.assertEqual(llm.answer_followup(self.model("analyst@example.com", blocks),
                                                      "Who is listed?", "source context"), "analyst@example.com")
                 self.assertEqual(llm.suggest_pivots(self.model('["analyst@example.com"]', blocks),
