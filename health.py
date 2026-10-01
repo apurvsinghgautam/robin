@@ -9,7 +9,7 @@ from config import redact_secrets, RobinConfig
 from search import SEARCH_ENGINES, get_tor_session, tor_bootstrapped, USER_AGENTS
 from scrape import get_over_tor
 from llm import get_llm
-from llm_utils import resolve_model_config
+from llm_utils import resolve_model_config, response_text
 
 
 def check_tor_proxy():
@@ -71,8 +71,8 @@ def check_llm_health(model_choice, cfg: Optional[RobinConfig] = None):
         llm = get_llm(model_choice, cfg)
         response = llm.invoke("Say OK")
         latency_ms = round((time.time() - start) * 1000)
-        text = getattr(response, "content", str(response))
-        if text and len(text.strip()) > 0:
+        text = response_text(response)
+        if text.strip():
             return {
                 "status": "up",
                 "latency_ms": latency_ms,

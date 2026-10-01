@@ -21,7 +21,7 @@ from llm import (
     refine_query,
     suggest_pivots,
 )
-from llm_utils import BufferedStreamingHandler
+from llm_utils import BufferedStreamingHandler, response_text
 from prompts import PRESETS
 from scrape import scrape_multiple
 from search import engines_unreachable, get_search_results_detailed
@@ -269,7 +269,8 @@ def run_investigation(cfg: Optional[RobinConfig],
     # Reasoning models (OpenAI o1, DeepSeek R1 and similar) may stream no answer
     # tokens, leaving the streamed buffer empty; generate_summary's return value
     # still holds the answer, so it is the fallback.
-    inv.summary = streamed["text"] if streamed["text"].strip() else (returned or "")
+    streamed_text = response_text(streamed["text"])
+    inv.summary = streamed_text if streamed_text.strip() else response_text(returned)
     if not inv.summary.strip():
         raise PipelineError("summarize", RuntimeError("the model returned an empty report"))
 

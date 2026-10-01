@@ -96,6 +96,28 @@ sets it explicitly, defaulting to 32768.
   hold that plus the prompt and the answer.
 - Reducing **Content per Page** or **Max Pages to Scrape** is the other lever.
 
+## The model rejects temperature or another request parameter
+
+Robin leaves temperature, top-p and top-k at the model or client defaults.
+Newer Claude and OpenAI reasoning models can reject sampling overrides;
+Gemini and local reasoning models can perform worse with a forced value of zero.
+Mistral's client still supplies its own default temperature of 0.7.
+
+- Update Robin and install the matching dependencies with
+  `python -m pip install -r requirements.txt`, or pull the latest Docker image.
+- Keep the original provider error: it names the setting that was rejected.
+  Replacing an API key will not fix an unsupported parameter.
+- Authentication errors require a valid key and model access. Rate-limit or
+  quota errors require waiting or checking the provider's usage limits.
+- For context-window errors, lower **Content per Page** or **Max Pages to
+  Scrape**, or choose a model with a larger window.
+
+Model replies may contain separate reasoning and answer blocks. Robin reads
+the answer blocks and removes leading local `<think>` prefixes before parsing
+selections or displaying and saving reports.
+If query refinement drops a recognized CVE, hash, email, onion address, wallet
+address or username mention, Robin keeps the original query instead.
+
 ## Docker container won't start, or the port is taken
 
 - **"port is already allocated"** or **"name already in use"**: an earlier Robin

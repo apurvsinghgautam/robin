@@ -200,5 +200,62 @@ class LlmFilterSelection(unittest.TestCase):
         self.assertEqual(len(selected), 101)
 
 
+class QueryIdentifiers(unittest.TestCase):
+    def test_a_lost_identifier_or_empty_answer_keeps_the_original_query(self):
+        from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+        from langchain_core.messages import AIMessage
+
+        identifiers = ["CVE-2026-12345", "0123456789abcdef" * 4,
+                       "0123456789abcdef" * 2, "0123456789" * 4,
+                       "analyst@example.com", "a" * 56 + ".onion",
+                       "0x" + "a" * 40, "bc1" + "q" * 38, "@forum_user"]
+        for identifier in identifiers:
+            query = identifier + " advisory"
+            client = FakeMessagesListChatModel(responses=[AIMessage(content="advisory leak")])
+            with self.subTest(identifier=identifier):
+                self.assertEqual(llm.refine_query(client, query), query)
+        client = FakeMessagesListChatModel(responses=[AIMessage(content="")])
+        self.assertEqual(llm.refine_query(client, "market data"), "market data")
+
+    def test_an_answer_that_keeps_identifiers_is_used_verbatim(self):
+        from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+        from langchain_core.messages import AIMessage
+
+        answer = "CVE-2026-12345 forum"
+        client = FakeMessagesListChatModel(responses=[AIMessage(content=answer)])
+        self.assertEqual(llm.refine_query(client, "CVE-2026-12345 advisory"), answer)
+
+
+class ReasoningResponses(unittest.TestCase):
+    """Actual prompt chains receive only the answer, in either provider format."""
+
+    def model(self, answer, blocks):
+        from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+        from langchain_core.messages import AIMessage
+        content = ([{"type": "thinking", "thinking": "Consider indices 1, 3 and 2026."},
+                    {"type": "text", "text": answer}] if blocks else
+                   "<think>Consider indices 1, 3 and 2026.</think>\n" + answer)
+        return FakeMessagesListChatModel(responses=[AIMessage(content=content)])
+
+    def test_every_stage_preserves_the_final_answer(self):
+        identifier = "CVE-2026-12345"
+        for blocks in (True, False):
+            with self.subTest(blocks=blocks):
+                self.assertEqual(llm.refine_query(self.model(identifier + " exploit", blocks),
+                                                 identifier), identifier + " exploit")
+                found = results(5)
+                picked, reply = llm.filter_results_detailed(self.model("2, 4", blocks), "acme", found)
+                self.assertEqual(picked, [found[1], found[3]])
+                self.assertEqual(reply, "2, 4")
+                self.assertEqual(llm.filter_results(self.model("", blocks), "acme", found), [])
+                content = {found[1]["link"]: "Acme leak listing. Contact: analyst@example.com."}
+                report = "## Findings\n- analyst@example.com appears in the supplied listing."
+                self.assertEqual(llm.generate_summary(self.model(report, blocks), "acme", content), report)
+                self.assertEqual(llm.answer_followup(self.model("analyst@example.com", blocks),
+                                                     "Who is listed?", "source context"), "analyst@example.com")
+                self.assertEqual(llm.suggest_pivots(self.model('["analyst@example.com"]', blocks),
+                                                   "acme", content), ["analyst@example.com"])
+
+
 if __name__ == "__main__":
     unittest.main()

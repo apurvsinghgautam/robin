@@ -3,13 +3,18 @@ pysocks
 requests
 streamlit
 python-dotenv
-langchain-openai
-langchain-ollama
+# Tested together: client defaults and response formats are part of Robin's API contract.
+langchain-core==1.6.6
+langchain-openai==1.6.7
+langchain-ollama==1.1.0
 backports.tarfile
-langchain-anthropic
+langchain-anthropic==1.7.5
 langchain_community
-langchain_google_genai
-langchain-mistralai
+langchain-google-genai==4.4.0
+langchain-mistralai==1.1.6
+openai==3.22.1
+anthropic==1.11.0
+google-genai==2.26.0
 # Pinned exactly: 1.30.0 is the last 1.x, whose FastMCP API every MCP host and
 # doc targets. 2.x renames it to MCPServer and drops the in-memory test client
 # the MCP tests use, so upgrading is a deliberate migration.
