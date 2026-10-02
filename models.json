@@ -1,7 +1,7 @@
 {
   "_comment": "Bundled offline fallback for model_registry.py. Live catalogues replace it at runtime; shutdown_dates also exclude retired models during outages.",
   "generated_at": "2026-09-10",
-  "shutdown_dates_updated_at": "2026-10-01",
+  "shutdown_dates_updated_at": "2026-10-02T00:05:11Z",
   "shutdown_dates": {
     "openai": {
       "gpt-3.5-turbo": "2026-10-23",

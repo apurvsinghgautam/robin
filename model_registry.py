@@ -283,12 +283,47 @@ def _shutdown_dates(payload):
             for provider, dates in values.items() if isinstance(dates, dict)}
 
 
-def _merge_shutdown_dates(*layers):
-    merged = {}
-    for layer in layers:
-        for provider, dates in layer.items():
-            merged.setdefault(provider, {}).update(dates)
-    return merged
+def _shutdown_metadata_stamp(value):
+    if isinstance(value, str):
+        try:
+            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            return _shutdown_metadata_stamp(stamp.timestamp())
+        except (ValueError, OverflowError, OSError):
+            return 0.0
+    if isinstance(value, (int, float)) and not isinstance(value, bool) \
+            and 0 <= value < float("inf"):
+        return value
+    return 0.0
+
+
+def _merge_shutdown_dates(seed, cached, cfg):
+    merged = _shutdown_dates(seed)
+    seed_stamp = (_shutdown_metadata_stamp(seed.get("shutdown_dates_updated_at"))
+                  or _shutdown_metadata_stamp(seed.get("generated_at")))
+    stamps = {name: {model: seed_stamp for model in dates}
+              for name, dates in merged.items()}
+    scopes = cached.get("scopes") or {}
+    cached_stamps = cached.get("shutdown_date_stamps") or {}
+    if not isinstance(scopes, dict):
+        return merged, stamps
+    if not isinstance(cached_stamps, dict):
+        cached_stamps = {}
+    for name, dates in _shutdown_dates(cached).items():
+        if scopes.get(name) != _scope(name, cfg):
+            continue
+        known = merged.setdefault(name, {})
+        known_stamps = stamps.setdefault(name, {})
+        own_stamps = cached_stamps.get(name) or {}
+        if not isinstance(own_stamps, dict):
+            own_stamps = {}
+        for model, shutdown in dates.items():
+            observed = _shutdown_metadata_stamp(own_stamps.get(model))
+            if model not in known or observed >= known_stamps.get(model, 0.0):
+                known[model] = shutdown
+                known_stamps[model] = observed
+    return merged, stamps
 
 
 def _active_models(providers, shutdown_dates):
@@ -389,15 +424,15 @@ def _load_cache(ignore_ttl: bool = False,
         if isinstance(scopes.get(name), str) and scopes[name] == _scope(name, cfg)
         and (ignore_ttl or fresh(name))
     }
-    shutdown_dates = _merge_shutdown_dates(
-        _shutdown_dates(_load_json_file(SEED_PATH) or {}), _shutdown_dates(payload))
+    shutdown_dates, _ = _merge_shutdown_dates(_load_json_file(SEED_PATH) or {}, payload, cfg)
     return _active_models(own_lists, shutdown_dates)
 
 
 def _write_cache(providers: Dict[str, List[str]], fetched_at: float,
                  cfg: Optional[RobinConfig] = None,
                  stamps: Optional[Dict[str, float]] = None,
-                 shutdown_dates: Optional[dict] = None) -> None:
+                 shutdown_dates: Optional[dict] = None,
+                 shutdown_date_stamps: Optional[dict] = None) -> None:
     """Write the lists, scoped to `cfg`, with an explicit stamp."""
     cfg = cfg if cfg is not None else RobinConfig.from_env()
     path = _cache_path(cfg)
@@ -407,6 +442,7 @@ def _write_cache(providers: Dict[str, List[str]], fetched_at: float,
         "scopes": {name: _scope(name, cfg) for name in providers},
         "stamps": {name: float(ts) for name, ts in (stamps or {}).items()},
         "shutdown_dates": shutdown_dates or {},
+        "shutdown_date_stamps": shutdown_date_stamps or {},
     }
     tmp_name = None
     try:
@@ -440,10 +476,10 @@ def refresh(cfg: Optional[RobinConfig] = None,
     # Seed first, then whatever we last fetched on top of it, expired or not.
     # A provider that failed to refresh keeps its last known list.
     merged = dict(_load_seed())
-    shutdown_dates = _shutdown_dates(_load_json_file(SEED_PATH) or {})
+    shutdown_dates, shutdown_date_stamps = _merge_shutdown_dates(
+        _load_json_file(SEED_PATH) or {}, _load_json_file(_cache_path(cfg)) or {}, cfg)
     own_lists = _load_cache(ignore_ttl=True, cfg=cfg) or {}
     merged.update(own_lists)
-    shutdown_dates = _merge_shutdown_dates(shutdown_dates, _cache_shutdown_dates(cfg))
     # The previous stamp is ours to keep only if the file held our lists: a
     # stamp another config's fetch earned must not make our fallback fresh.
     previous_fetch = _cache_fetched_at(cfg) if own_lists else None
@@ -452,6 +488,7 @@ def refresh(cfg: Optional[RobinConfig] = None,
         try:
             catalogue = PROVIDERS[name]["fetch"](cfg)
             models, dates = [], dict(shutdown_dates.get(name, {}))
+            date_stamps = dict(shutdown_date_stamps.get(name, {}))
             for item in catalogue:
                 model = item.get("id") if isinstance(item, dict) else item
                 if isinstance(model, str) and model:
@@ -459,12 +496,15 @@ def refresh(cfg: Optional[RobinConfig] = None,
                     shutdown = _shutdown_date(item.get("shutdown_date")) if isinstance(item, dict) else None
                     if shutdown:
                         dates[model] = shutdown
+                        date_stamps[model] = time.time()
                     elif isinstance(item, dict) and "shutdown_date" in item \
                             and item["shutdown_date"] is None and model in dates:
                         dates[model] = None
+                        date_stamps[model] = time.time()
             if models:
                 merged[name] = models
                 shutdown_dates[name] = dates
+                shutdown_date_stamps[name] = date_stamps
                 fetched_ok.add(name)
                 if verbose:
                     _report("  {:<12} {} models".format(name, len(models)))
@@ -489,7 +529,8 @@ def refresh(cfg: Optional[RobinConfig] = None,
     stamps = dict(_cache_stamps(cfg) if own_lists else {})
     stamps.update({name: time.time() for name in fetched_ok})
     merged = _active_models(merged, shutdown_dates)
-    _write_cache(merged, stamp, cfg, stamps=stamps, shutdown_dates=shutdown_dates)
+    _write_cache(merged, stamp, cfg, stamps=stamps, shutdown_dates=shutdown_dates,
+                 shutdown_date_stamps=shutdown_date_stamps)
     return merged
 
 
