@@ -68,17 +68,23 @@ This is almost always the container being unable to reach Ollama on the host.
 ## "Model not found", "this model is out of date", or a failing connection check
 
 Providers retire models, so Robin keeps no hardcoded model list: it asks each
-provider what it currently serves and caches the answer.
+provider for its catalogue and caches the answer. OpenAI can still list models
+after retirement; Robin uses its `shutdown_date` metadata to exclude them on
+and after that date in UTC. Future shutdown dates remain selectable until then.
 
 - Restart Robin to force a refresh. The container refreshes on start.
 - Delete the cache to force a rebuild: remove `~/.robin/models_cache.json`, or
   whatever `ROBIN_CACHE_DIR` points at. A damaged cache repairs itself on the
   next launch, so this is rarely necessary.
 - Set `MODEL_REGISTRY_TTL_HOURS` to control how long a fetched list is reused.
-  The default is 24.
-- If a provider is unreachable, Robin keeps the last list it had rather than
-  emptying the picker, so a stale entry can survive an outage. A restart with
-  the network back will clear it.
+  The default is 24. Known shutdown dates are checked each time the list is read,
+  even before that cache expires. Older OpenAI caches refresh to learn the dates.
+- If a provider is unreachable, Robin keeps the last list it had and applies
+  known shutdown dates. Entries without retirement metadata can become stale
+  during an outage; a restart with the network back refreshes them.
+- If the provider explicitly says a model was retired or shut down, select an
+  active model. Refreshing cannot restore it. Update Robin if a retired model
+  still appears in the picker.
 - The bundled offline list covers OpenAI, Anthropic, Google and OpenRouter.
   Mistral has no bundled entry yet, so a Mistral-only setup needs one
   successful online run before its models appear. Robin will name the provider

@@ -120,6 +120,17 @@ class PipelineErrorGuidance(unittest.TestCase):
                 if expected in ("Content per Page", "quota"):
                     self.assertNotIn("API key", shown)
 
+    def test_retirement_errors_explain_selecting_an_active_model(self):
+        for message, status in (
+                ("The model gpt-5.3-chat-latest has been deprecated; model_not_found", 404),
+                ("This model has been shut down", 404),
+                ("The selected model is retired", None)):
+            with self.subTest(message=message):
+                shown = self.render(message, status)
+                self.assertIn("Select an active model", shown)
+                self.assertIn("cannot restore a retired model", shown)
+                self.assertNotIn("Refresh the model list or restart Robin", shown)
+
 
 class _FakeCache:
     """`st.cache_data` with a per-arguments `.clear`, recording every real call."""

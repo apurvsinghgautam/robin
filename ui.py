@@ -52,7 +52,11 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
         hints = ["- Confirm the selected provider's API key is set in your `.env` or shell, "
                  "is valid, and has access to this model.",
                  "- Remove any spaces around the key and restart Robin after updating it."]
-    elif any(t in lower_msg for t in ("model_not_found", "model not found", "retired", "does not exist")):
+    elif "retired" in lower_msg or ((status == 404 or "model_not_found" in lower_msg)
+                                    and any(t in lower_msg for t in ("deprecated", "shut down", "shutdown"))):
+        hints = ["- The provider has retired this model. Select an active model from the sidebar.",
+                 "- Restarting or refreshing cannot restore a retired model. Update Robin if it still appears in the picker."]
+    elif any(t in lower_msg for t in ("model_not_found", "model not found", "does not exist")):
         hints = ["- Refresh the model list or restart Robin, then select a model your provider currently serves."]
     elif status == 400:
         hints = ["- The provider rejected the request. Check the error above for the setting "
