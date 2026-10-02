@@ -125,7 +125,7 @@ def _fetch_openai(cfg: RobinConfig) -> List[dict]:
         {"Authorization": "Bearer {}".format(cfg.openai_api_key)},
     )
     return sorted(
-        ({"id": m["id"], "shutdown_date": m.get("shutdown_date")} for m in data.get("data", [])
+        ({key: m[key] for key in ("id", "shutdown_date") if key in m} for m in data.get("data", [])
          if m.get("id") and not _looks_non_chat(m["id"], "openai")),
         key=lambda model: _version_sort_key(model["id"]),
     )
@@ -279,8 +279,16 @@ def _shutdown_dates(payload):
     if not isinstance(values, dict):
         return {}
     return {provider: {model: parsed for model, value in dates.items()
-                       if isinstance(model, str) and (parsed := _shutdown_date(value))}
+                       if isinstance(model, str) and ((parsed := _shutdown_date(value)) or value is None)}
             for provider, dates in values.items() if isinstance(dates, dict)}
+
+
+def _merge_shutdown_dates(*layers):
+    merged = {}
+    for layer in layers:
+        for provider, dates in layer.items():
+            merged.setdefault(provider, {}).update(dates)
+    return merged
 
 
 def _active_models(providers, shutdown_dates):
@@ -381,7 +389,9 @@ def _load_cache(ignore_ttl: bool = False,
         if isinstance(scopes.get(name), str) and scopes[name] == _scope(name, cfg)
         and (ignore_ttl or fresh(name))
     }
-    return _active_models(own_lists, _shutdown_dates(payload))
+    shutdown_dates = _merge_shutdown_dates(
+        _shutdown_dates(_load_json_file(SEED_PATH) or {}), _shutdown_dates(payload))
+    return _active_models(own_lists, shutdown_dates)
 
 
 def _write_cache(providers: Dict[str, List[str]], fetched_at: float,
@@ -433,7 +443,7 @@ def refresh(cfg: Optional[RobinConfig] = None,
     shutdown_dates = _shutdown_dates(_load_json_file(SEED_PATH) or {})
     own_lists = _load_cache(ignore_ttl=True, cfg=cfg) or {}
     merged.update(own_lists)
-    shutdown_dates.update(_cache_shutdown_dates(cfg))
+    shutdown_dates = _merge_shutdown_dates(shutdown_dates, _cache_shutdown_dates(cfg))
     # The previous stamp is ours to keep only if the file held our lists: a
     # stamp another config's fetch earned must not make our fallback fresh.
     previous_fetch = _cache_fetched_at(cfg) if own_lists else None
@@ -441,7 +451,7 @@ def refresh(cfg: Optional[RobinConfig] = None,
     for name in configured_providers(cfg):
         try:
             catalogue = PROVIDERS[name]["fetch"](cfg)
-            models, dates = [], {}
+            models, dates = [], dict(shutdown_dates.get(name, {}))
             for item in catalogue:
                 model = item.get("id") if isinstance(item, dict) else item
                 if isinstance(model, str) and model:
@@ -449,6 +459,9 @@ def refresh(cfg: Optional[RobinConfig] = None,
                     shutdown = _shutdown_date(item.get("shutdown_date")) if isinstance(item, dict) else None
                     if shutdown:
                         dates[model] = shutdown
+                    elif isinstance(item, dict) and "shutdown_date" in item \
+                            and item["shutdown_date"] is None and model in dates:
+                        dates[model] = None
             if models:
                 merged[name] = models
                 shutdown_dates[name] = dates

@@ -178,6 +178,60 @@ class ModelShutdownDates(RegistryTestCase):
         self.clock.now.return_value = datetime(2026, 10, 2, tzinfo=timezone.utc)
         self.assertEqual(model_registry._load_cache(cfg=CFG)["openai"], ["gpt-active"])
 
+    def test_live_catalogue_without_shutdown_fields_keeps_bundled_retirements(self):
+        model_registry.SEED_PATH.write_text(json.dumps({
+            "providers": {"openai": ["gpt-retired", "gpt-active"]},
+            "shutdown_dates": {"openai": {"gpt-retired": "2026-09-30"}}}))
+        records = [{"id": "gpt-retired"}, {"id": "gpt-active"}]
+        with mock.patch.object(model_registry, "_get_json", return_value={"data": records}), \
+                self.providers(openai=model_registry._fetch_openai):
+            self.assertEqual(model_registry.refresh(CFG)["openai"], ["gpt-active"])
+        self.assertEqual(self.read_cache()["shutdown_dates"]["openai"],
+                         {"gpt-retired": "2026-09-30"})
+
+    def test_partial_cache_metadata_does_not_replace_bundled_retirements(self):
+        model_registry.SEED_PATH.write_text(json.dumps({
+            "providers": {"openai": ["gpt-retired", "gpt-future", "gpt-active"]},
+            "shutdown_dates": {"openai": {"gpt-retired": "2026-09-30"}}}))
+        self.write_cache({"openai": ["gpt-retired", "gpt-future", "gpt-active"]})
+        payload = self.read_cache()
+        payload["shutdown_dates"] = {"openai": {"gpt-future": "2026-10-02"}}
+        self.cache_path.write_text(json.dumps(payload))
+        with self.providers(openai=fails):
+            self.assertEqual(model_registry.refresh(CFG)["openai"],
+                             ["gpt-future", "gpt-active"])
+        self.assertEqual(self.read_cache()["shutdown_dates"]["openai"], {
+            "gpt-retired": "2026-09-30", "gpt-future": "2026-10-02"})
+
+    def test_fresh_cache_uses_new_bundled_retirement_dates_without_refetching(self):
+        fetch = mock.Mock(return_value=[{"id": "gpt-retired"}, {"id": "gpt-active"}])
+        with self.providers(openai=fetch):
+            self.assertEqual(model_registry.get_registry(CFG)["openai"],
+                             ["gpt-retired", "gpt-active"])
+            model_registry.SEED_PATH.write_text(json.dumps({
+                "shutdown_dates": {"openai": {"gpt-retired": "2026-09-30"}}}))
+            self.assertEqual(model_registry.get_registry(CFG)["openai"], ["gpt-active"])
+        fetch.assert_called_once_with(CFG)
+
+    def test_partial_live_metadata_keeps_previous_shutdown_announcements(self):
+        with self.providers(openai=serves(
+                {"id": "gpt-future", "shutdown_date": "2026-10-02"}, {"id": "gpt-active"})):
+            model_registry.refresh(CFG)
+        with self.providers(openai=serves(
+                {"id": "gpt-future"}, {"id": "gpt-active", "shutdown_date": "2026-10-03"})):
+            model_registry.refresh(CFG)
+        self.clock.now.return_value = datetime(2026, 10, 2, tzinfo=timezone.utc)
+        self.assertEqual(model_registry._load_cache(cfg=CFG)["openai"], ["gpt-active"])
+
+    def test_explicit_null_can_cancel_a_bundled_shutdown_across_cache_reads(self):
+        model_registry.SEED_PATH.write_text(json.dumps({
+            "shutdown_dates": {"openai": {"gpt-active": "2026-09-30"}}}))
+        records = [{"id": "gpt-active", "shutdown_date": None}]
+        with mock.patch.object(model_registry, "_get_json", return_value={"data": records}), \
+                self.providers(openai=model_registry._fetch_openai):
+            self.assertEqual(model_registry.refresh(CFG)["openai"], ["gpt-active"])
+        self.assertEqual(model_registry._load_cache(cfg=CFG)["openai"], ["gpt-active"])
+
 
 class RefreshStampsOnlyASuccess(RegistryTestCase):
     """`fetched_at` and the per-provider stamps record a fetch that answered."""
