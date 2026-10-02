@@ -1,4 +1,4 @@
-"""Adversarial reports must preserve source provenance without releasing model prose."""
+"""Readable analysis must retain checked evidence and actual artifact provenance."""
 import json
 import tempfile
 import unittest
@@ -21,6 +21,101 @@ from tests.model_smoke import CVE, EMAIL, HASH, PAGES, QUERY, SOURCE, FOLLOWUP_S
 
 def selection(keys=(), **extra):
     return json.dumps({"sections": {"Key Insights": list(keys)}, "next_steps": [], **extra})
+
+
+def finding(text, key, quote):
+    return {"text": text, "evidence": [{"evidence_id": key, "quote": quote}]}
+
+
+class ReadableReports(unittest.TestCase):
+    def setUp(self):
+        self.fact = "The directory lists ransomware leak sites."
+        self.page = ("Home Login Register Open Stats API " * 35
+                     + "\n" + self.fact + "\nContact: " + EMAIL + ".")
+        self.index = evidence.build_evidence([(SOURCE, self.page),
+                                              (FOLLOWUP_SOURCE, "Contact: " + EMAIL + ".")])
+        self.key = next(key for key, item in self.index["passages"].items()
+                        if self.fact in item["quote"])
+
+    def test_insights_are_concise_analysis_with_checked_support_not_page_dumps(self):
+        text = "The page provides a directory of ransomware leak sites."
+        report, check = evidence.render_report(
+            "ransomware leak sites", selection([finding(text, self.key, self.fact)]), self.index)
+        insights = report.split("## Key Insights", 1)[1].split("## Next Steps", 1)[0]
+        self.assertIn(text + " [1]", insights)
+        self.assertNotIn("Home Login Register", report)
+        self.assertNotIn("Supporting source passages", report)
+        self.assertNotIn("Source:", insights)
+        self.assertEqual(check["accepted_findings"], 1)
+        self.assertEqual(check["findings"][0]["evidence"][0]["quote"], self.fact)
+
+    def test_artifacts_deduplicate_sources_and_use_compact_numbered_citations(self):
+        report, check = evidence.render_report("query", selection(), self.index)
+        source_list = report.split("## Source Links Referenced for Analysis", 1)[1].split(
+            "## Investigation Artifacts", 1)[0]
+        self.assertIn("1. [", source_list)
+        self.assertIn("2. [", source_list)
+        artifacts = report.split("## Investigation Artifacts", 1)[1].split("## Key Insights", 1)[0]
+        self.assertIn(EMAIL, artifacts)
+        self.assertIn("[1, 2]", artifacts)
+        self.assertNotIn(SOURCE, artifacts)
+        self.assertNotIn(FOLLOWUP_SOURCE, artifacts)
+        self.assertEqual(check["artifact_sources"][0]["sources"], [SOURCE, FOLLOWUP_SOURCE])
+
+    def test_a_finding_cites_each_checked_supporting_page_once(self):
+        quote = "Contact: " + EMAIL + "."
+        supports = [{"evidence_id": key, "quote": quote} for key, item in self.index["passages"].items()
+                    if quote in item["quote"]]
+        item = {"text": "Both pages list the same contact; that alone does not establish common ownership.",
+                "evidence": supports + supports[:1]}
+        report, check = evidence.render_report("query", selection([item]), self.index)
+        self.assertIn(item["text"] + " [1, 2]", report)
+        self.assertEqual(len(check["findings"][0]["evidence"]), 2)
+
+    def test_one_invalid_quote_rejects_the_whole_multi_source_finding(self):
+        item = finding("Both pages identify a leak-site directory.", self.key, self.fact)
+        other_key = next(key for key, page in self.index["passages"].items()
+                         if page["source_url"] == FOLLOWUP_SOURCE)
+        item["evidence"].append({"evidence_id": other_key, "quote": self.fact})
+        report, check = evidence.render_report("query", selection([item]), self.index)
+        self.assertNotIn(item["text"], report)
+        self.assertEqual(check["accepted_findings"], 0)
+
+    def test_artifact_context_keeps_the_value_inside_a_bounded_exact_excerpt(self):
+        page = 'long navigation text ' * 80 + EMAIL + ' more navigation ' * 80
+        index = evidence.build_evidence([(SOURCE, page)])
+        artifact = index["artifacts"][0]
+        passage = index["passages"][artifact["evidence_ids"][0]]["quote"]
+        quote = evidence._excerpt(passage, EMAIL)
+        self.assertIn(EMAIL, quote)
+        self.assertIn(quote, passage)
+        self.assertLessEqual(len(quote), evidence.MAX_QUOTE_CHARS)
+
+    def test_an_unmatched_or_oversized_quote_cannot_support_a_finding(self):
+        for quote in ("The directory is operated by a ransomware gang.", self.page):
+            with self.subTest(quote=quote[:30]):
+                report, check = evidence.render_report(
+                    "query", selection([finding("Unsupported ownership claim.", self.key, quote)]), self.index)
+                self.assertNotIn("Unsupported ownership claim", report)
+                self.assertEqual(check["accepted_findings"], 0)
+                self.assertTrue(check["rejected"])
+
+    def test_real_evidence_from_another_page_cannot_validate_a_quote(self):
+        other_key = next(key for key, item in self.index["passages"].items()
+                         if item["source_url"] == FOLLOWUP_SOURCE)
+        report, check = evidence.render_report(
+            "query", selection([finding("The other page is a leak-site directory.", other_key, self.fact)]), self.index)
+        self.assertNotIn("The other page is a leak-site directory", report)
+        self.assertEqual(check["accepted_findings"], 0)
+
+    def test_findings_cannot_add_identifiers_or_numbers_missing_from_their_support(self):
+        for text in ("The directory exposes CVE-2026-99999.", "The directory lists 99 leak sites.",
+                     "Contact forged@example.net for access."):
+            with self.subTest(text=text):
+                report, check = evidence.render_report(
+                    "query", selection([finding(text, self.key, self.fact)]), self.index)
+                self.assertNotIn(text, report)
+                self.assertEqual(check["accepted_findings"], 0)
 
 
 class SourceMappings(unittest.TestCase):
@@ -79,7 +174,7 @@ class UntrustedSelections(unittest.TestCase):
         report, check = evidence.render_report(
             QUERY, selection([self.keys[0], attack, "unknown-id"], claim=fabricated), self.index)
         self.assertNotIn(fabricated, report)
-        self.assertEqual(check["rejected"], {"unknown_evidence": 2})
+        self.assertEqual(check["rejected"], {"invalid_finding": 1, "unknown_evidence": 1})
         self.assertEqual(check["accepted_findings"], 1)
 
     def test_malformed_or_ambiguous_json_fails_closed(self):
@@ -153,18 +248,23 @@ class BeforeRelease(unittest.TestCase):
     def test_one_call_returns_checked_markdown_and_restores_without_releasing_callbacks(self):
         seen = []
         handler = BufferedStreamingHandler(ui_callback=seen.append)
-        keys = evidence.build_evidence(PAGES.items())["passages"]
-        model = DraftModel(reply=selection(keys), callbacks=[handler])
+        key = next(iter(evidence.build_evidence(PAGES.items())["passages"]))
+        quote = "This is an unverified forum claim; no victims, ransomware group, cryptocurrency address, or exploitation date are given."
+        model = DraftModel(reply=selection([finding("The advisory provides an unverified forum claim.", key, quote)]),
+                           callbacks=[handler])
         report, check = llm.generate_summary_detailed(model, QUERY, PAGES)
         self.assertEqual(model.calls, 1)
         self.assertEqual(seen, [])
         self.assertEqual(model.callbacks, [handler])
         self.assertNotIn("UNCHECKED", report)
         self.assertEqual(check["status"], "source_matched")
+        self.assertEqual(check["accepted_findings"], 1)
 
     def test_pipeline_releases_and_saves_only_the_grounded_report(self):
         seen = []
-        model = DraftModel(reply=selection(evidence.build_evidence(PAGES.items())["passages"]))
+        key = next(iter(evidence.build_evidence(PAGES.items())["passages"]))
+        quote = "This is an unverified forum claim; no victims, ransomware group, cryptocurrency address, or exploitation date are given."
+        model = DraftModel(reply=selection([finding("The advisory provides an unverified forum claim.", key, quote)]))
         results = [{"link": link, "title": "Public synthetic source"} for link in PAGES]
         with tempfile.TemporaryDirectory() as folder, \
                 mock.patch.object(pipeline, "refine_query", return_value=QUERY), \
@@ -178,6 +278,7 @@ class BeforeRelease(unittest.TestCase):
             self.assertEqual(seen, [inv.summary])
             self.assertEqual(saved["summary"], inv.summary)
             self.assertEqual(saved["evidence_check"], inv.evidence_check)
+            self.assertEqual(saved["evidence_check"]["findings"][0]["evidence"][0]["quote"], quote)
             self.assertNotIn("scraped", saved)
             self.assertEqual(model.calls, 1)
             self.assertNotIn("UNCHECKED", json.dumps(saved))

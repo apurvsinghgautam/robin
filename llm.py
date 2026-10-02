@@ -308,7 +308,7 @@ def generate_summary(llm, query, content, preset="threat_intel", custom_instruct
 
 
 def generate_summary_detailed(llm, query, content, preset="threat_intel", custom_instructions=""):
-    """One model selection call, followed by deterministic source matching and rendering."""
+    """One analysis call, followed by quotation and provenance checks before rendering."""
     preset = preset if preset in PRESET_PROMPTS else "threat_intel"
     system_prompt = PRESET_PROMPTS.get(preset, PRESET_PROMPTS["threat_intel"])
     index = build_evidence(_scraped_pages(content))

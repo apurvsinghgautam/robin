@@ -46,6 +46,25 @@ class HostEvidence(unittest.TestCase):
             self.assertEqual(check["rejected"], {"unknown_evidence": 1})
             self.assertNotIn("evidence_id:", saved["summary"])
 
+    def test_a_host_saves_concise_findings_with_checked_quotes_and_numbered_sources(self):
+        with tempfile.TemporaryDirectory() as folder:
+            server = self.server(folder)
+
+            async def body():
+                async with connect(server) as session:
+                    keys = await self.read(session)
+                    quote = "This is an unverified forum claim; no victims, ransomware group, cryptocurrency address, or exploitation date are given."
+                    finding = {"text": "The advisory is an unverified forum claim and gives no victim or ransomware-group attribution.",
+                               "evidence": [{"evidence_id": keys[0], "quote": quote}]}
+                    reply = await self.save(session, [finding])
+                    self.assertIn("status: ok", reply)
+            run(body)
+            saved = store.load_investigations(folder)[0]
+            self.assertIn("no victim or ransomware-group attribution. [1]", saved["summary"])
+            self.assertNotIn("Supporting source passages", saved["summary"])
+            self.assertEqual(saved["evidence_check"]["accepted_findings"], 1)
+            self.assertEqual(saved["evidence_check"]["findings"][0]["evidence"][0]["source_url"], SOURCE)
+
     def test_after_scraping_unchecked_prose_or_unread_sources_cannot_be_saved(self):
         with tempfile.TemporaryDirectory() as folder:
             server = self.server(folder)

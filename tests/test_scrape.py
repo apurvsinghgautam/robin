@@ -374,6 +374,23 @@ def as_requests_would(body, content_type):
 
 
 class PageTextIsExtractedAndDecoded(ScrapeTestCase):
+    def test_a_short_explicit_article_is_kept_without_restoring_a_large_menu(self):
+        html = '<nav>' + 'Home Login Register Stats API ' * 50 + '</nav><main><p>Directory of leak sites.</p></main>'
+        self.assertEqual(scrape.extract_page_text(html), 'Directory of leak sites.')
+
+    def test_content_blocks_stay_separate_without_splitting_inline_text(self):
+        html = ('<nav>Home Login</nav><main><h1>Leak directory</h1>'
+                '<p>Donations support <strong>this directory</strong>.</p>'
+                '<p>Contact: <a>analyst@example.com</a>.</p>'
+                '<table><tr><td>Group A</td><td>Leak site</td></tr>'
+                '<tr><td>Group B</td><td>Mirror</td></tr></table></main>')
+        text = scrape.extract_page_text(html)
+        self.assertIn('Donations support this directory.', text)
+        self.assertIn('Contact: analyst@example.com.', text)
+        self.assertIn('\nContact:', text)
+        self.assertIn('Group A Leak site\nGroup B Mirror', text)
+        self.assertNotIn('Home Login', text)
+
     def test_furniture_is_stripped_but_content_is_not(self):
         article = "Real article body. " * 40
         cases = (

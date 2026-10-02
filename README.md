@@ -248,16 +248,20 @@ infrastructure rather than on your machine.
 ### Evidence grounding
 
 Robin extracts recognized technical identifiers and records the pages where
-they appear. The report model selects source passages; Robin renders their
-exact text and URLs, keeping proposed actions separate from findings. Invalid
-references are omitted, and malformed report selections fail without displaying
+they appear. The report model writes concise findings with short supporting
+quotations. Robin checks each quote against its cited passage and rejects
+identifiers or numeric facts absent from that support. Sources appear once in
+a numbered list, with compact references such as `[1, 2]` beside artifacts and
+findings. Checked quotes remain in the evidence metadata rather than appearing
+as raw page dumps. Proposed actions stay separate from findings. Invalid
+findings are omitted, and malformed report selections fail without displaying
 or saving the unchecked draft. The report appears after these checks finish.
 
 When driving the MCP tools yourself, save the evidence-selection JSON requested
 by `robin_scrape` as `summary`; Robin returns the checked Markdown report.
 Markdown imported without page evidence in the current session is marked as
-unchecked. Source matching confirms what the supplied excerpts say, rather than
-independently verifying those claims.
+unchecked. Quotation and source matching establish provenance; they do not
+independently verify source claims or every model interpretation.
 
 ### Security
 

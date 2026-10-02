@@ -1568,11 +1568,13 @@ def build_server(cfg: Optional[RobinConfig] = None,
             pivots: Annotated[Optional[List[str]],
                               Field(max_length=MAX_SAVED_PIVOTS)] = None,
             model: str = "host") -> str:
-        """Save an evidence selection from Robin's scraped pages as a Markdown report.
+        """Save evidence-linked findings from Robin's scraped pages as a Markdown report.
 
         After robin_scrape, summary must be evidence-selection JSON, using the
-        supplied evidence IDs. Robin checks the IDs and renders the exact source
-        passages. It never saves unchecked model paraphrases as factual findings.
+        supplied evidence IDs and short verbatim supporting quotations. Robin
+        checks the quotations, identifiers and source provenance, then renders
+        concise findings with numbered citations. These checks do not independently
+        verify the meaning of a model's interpretation.
         A Markdown report imported without pages in this session is saved with
         evidence_check.status=not_checked; it is not an automatically grounded report.
 

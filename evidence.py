@@ -4,6 +4,7 @@ import ipaddress
 import json
 import re
 from collections import Counter
+from urllib.parse import quote as quote_url, urlsplit
 
 from prompts import preset_sections
 from scrape import fence_untrusted, scrub_untrusted_text
@@ -15,6 +16,9 @@ MAX_ARTIFACTS = 100
 MAX_FINDINGS = 20
 MAX_NEXT_STEPS = 10
 MAX_REPORT_CHARS = 200_000
+MAX_QUOTE_CHARS = 240
+MAX_FINDING_CHARS = 360
+_NUMBER_RE = re.compile(r"(?<!\w)\d+(?:[,.]\d+)*(?:%|\b)")
 
 _ARTIFACT_PATTERNS = (
     ("CVE", re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.I)),
@@ -128,14 +132,87 @@ def _literal(text):
     return re.sub(r"([\\`*_{}\[\]()#!|])", r"\\\1", text)
 
 
-def _quoted(item):
-    lines = ["- Source: " + _literal(item["source_url"]), ""]
-    lines.extend("> " + _literal(line) for line in item["quote"].splitlines())
-    return "\n".join(lines)
+def _excerpt(text, value=""):
+    line = next((line.strip() for line in text.splitlines() if line.strip() and value in line), "")
+    if len(line) <= MAX_QUOTE_CHARS:
+        return line
+    start = max(0, line.find(value) - 80) if value else 0
+    if start:
+        boundary = line.find(" ", start, line.find(value))
+        if boundary >= 0:
+            start = boundary + 1
+    end = min(len(line), start + MAX_QUOTE_CHARS)
+    if end < len(line):
+        boundary = line.rfind(" ", max(start, line.find(value) + len(value)), end)
+        if boundary > start:
+            end = boundary
+    return line[start:end].strip()
+
+
+def _finding(item, index, rejected):
+    # Old hosts can still submit passage IDs; keep their excerpts bounded.
+    if isinstance(item, str):
+        if item not in index["passages"]:
+            rejected["unknown_evidence"] += 1
+            return None
+        page = index["passages"][item]
+        return {"text": "Source excerpt: " + _excerpt(page["quote"]),
+                "evidence": [{"evidence_id": item, "quote": _excerpt(page["quote"]),
+                              "source_url": page["source_url"]}]}
+    if not isinstance(item, dict) or not isinstance(item.get("text"), str):
+        rejected["invalid_finding"] += 1
+        return None
+    text = " ".join(scrub_untrusted_text(item["text"]).split())
+    support = item.get("evidence")
+    if not text or len(text) > MAX_FINDING_CHARS or not isinstance(support, list) or not 1 <= len(support) <= 3:
+        rejected["invalid_finding"] += 1
+        return None
+    checked = []
+    for entry in support:
+        key = entry.get("evidence_id") if isinstance(entry, dict) else None
+        if not isinstance(key, str) or key not in index["passages"]:
+            rejected["unknown_evidence"] += 1
+            return None
+        quote = entry.get("quote")
+        if (not isinstance(quote, str) or not 20 <= len(quote.strip()) <= MAX_QUOTE_CHARS
+                or quote.strip() not in index["passages"][key]["quote"]):
+            rejected["quote_mismatch"] += 1
+            return None
+        record = {"evidence_id": key, "quote": quote.strip(),
+                  "source_url": index["passages"][key]["source_url"]}
+        if record not in checked:
+            checked.append(record)
+    support_text = "\n".join(entry["quote"] for entry in checked)
+    if any(value not in support_text for _, value in extract_artifacts(text)):
+        rejected["unsupported_identifier"] += 1
+        return None
+    numbers = {number.replace(",", "") for number in _NUMBER_RE.findall(support_text)}
+    if any(number.replace(",", "") not in numbers for number in _NUMBER_RE.findall(text)):
+        rejected["unsupported_number"] += 1
+        return None
+    return {"text": text, "evidence": checked}
+
+
+def _source_link(number, source):
+    try:
+        url = urlsplit(source)
+        if url.scheme in ("http", "https") and url.netloc:
+            return "{}. [{}](<{}>)".format(number, _literal(source),
+                                           quote_url(source, safe="/:?#&=%@+~"))
+    except ValueError:
+        pass
+    return "{}. {}".format(number, _literal(source))
+
+
+def _citations(sources, numbers):
+    return "[{}]".format(", ".join(str(number) for number in sorted({numbers[source] for source in sources})))
 
 
 def render_report(query, raw, index, preset="threat_intel"):
-    """Render checked source excerpts, never the model's factual paraphrases."""
+    """Render concise findings after checking their quotations and source provenance.
+
+    Quotation matching does not independently verify a model's interpretation.
+    """
     if len(query) >= MAX_REPORT_CHARS:
         raise ValueError("the source-based report exceeds the save limit; shorten the query")
     selected = _selection(raw)
@@ -146,44 +223,43 @@ def render_report(query, raw, index, preset="threat_intel"):
         if section not in factual or not isinstance(items, list):
             rejected["invalid_section"] += 1
             continue
-        keys = []
+        findings = []
         limit = 5 if section == "Key Insights" else MAX_FINDINGS
-        for key in items:
-            if not isinstance(key, str) or key not in index["passages"]:
-                rejected["unknown_evidence"] += 1
-            elif key not in keys:
-                if len(keys) < limit:
-                    keys.append(key)
+        for item in items:
+            finding = _finding(item, index, rejected)
+            if finding and finding not in findings:
+                if len(findings) < limit:
+                    findings.append(finding)
                 else:
                     rejected["section_limit"] += 1
-        accepted[section] = keys
+        accepted[section] = findings
 
-    lines = ["## " + headings[0], _literal(query), "", "## " + headings[1]]
-    lines.extend("- " + _literal(source) for source in index["sources"])
-    lines.extend(["", "## " + headings[2]])
+    numbers = {source: number for number, source in enumerate(index["sources"], 1)}
+    lines = ["## " + headings[0], "", _literal(query), "", "## " + headings[1], ""]
+    lines.extend(_source_link(numbers[source], source) for source in index["sources"])
+    lines.extend(["", "## " + headings[2], ""])
     lines.append("Observed identifiers; their presence does not establish a relationship or attribution.")
+    lines.append("")
     artifacts = index["artifacts"][:MAX_ARTIFACTS]
-    cited = []
     for artifact in artifacts:
-        lines.append("- **{}:** {}".format(artifact["type"], _literal(artifact["value"])))
-        for key in artifact["evidence_ids"]:
-            lines.append("  - Source: " + _literal(index["passages"][key]["source_url"]))
-            if key not in cited:
-                cited.append(key)
+        sources = [index["passages"][key]["source_url"] for key in artifact["evidence_ids"]]
+        first = index["passages"][artifact["evidence_ids"][0]]
+        context = _excerpt(first["quote"], artifact["value"])
+        lines.append("- **{}:** {} {} — Context {}: “{}”".format(
+            artifact["type"], _literal(artifact["value"]), _citations(sources, numbers),
+            _citations([first["source_url"]], numbers), _literal(context)))
     if not artifacts:
         lines.append("No recognized technical identifiers in the supplied excerpts.")
-    if cited:
-        lines.extend(["", "Supporting source passages:", ""])
-        lines.extend(_quoted(index["passages"][key]) + "\n" for key in cited)
     for heading in factual:
-        lines.extend(["", "## " + heading])
-        keys = accepted.get(heading, [])
-        if not keys:
+        lines.extend(["", "## " + heading, ""])
+        findings = accepted.get(heading, [])
+        if not findings:
             lines.append("Not established by the supplied excerpts.")
-        for key in keys:
-            lines.append(_quoted(index["passages"][key]) + "\n")
+        for finding in findings:
+            sources = [entry["source_url"] for entry in finding["evidence"]]
+            lines.append("- {} {}".format(_literal(finding["text"]), _citations(sources, numbers)))
 
-    lines.extend(["", "## " + headings[-1], "Proposed investigative actions, not findings."])
+    lines.extend(["", "## " + headings[-1], "", "Proposed investigative actions, not findings.", ""])
     allowed = {value for _, value in extract_artifacts(query)} | {
         item["value"] for item in index["artifacts"]}
     steps = []
@@ -200,15 +276,18 @@ def render_report(query, raw, index, preset="threat_intel"):
     lines.extend("- " + _literal(step) for step in steps)
     if not steps:
         lines.append("No supported next steps proposed.")
-    lines.extend(["", "Source passages are quoted evidence of what a page says; they are not independent confirmation."])
+    lines.extend(["", "Findings describe the supplied pages; source claims have not been independently verified."])
     if rejected:
         lines.append("{} invalid evidence selection(s) or proposed action(s) omitted.".format(sum(rejected.values())))
     if len(index["artifacts"]) > MAX_ARTIFACTS:
         lines.append("Artifact listing limited to the first {} identifiers.".format(MAX_ARTIFACTS))
     metadata = {
-        "status": "source_matched", "format": "source-excerpts-v1",
-        "accepted_findings": sum(len(keys) for keys in accepted.values()),
+        "status": "source_matched", "format": "grounded-findings-v2",
+        "accepted_findings": sum(len(findings) for findings in accepted.values()),
         "rejected": dict(rejected),
+        "source_references": [{"number": numbers[source], "url": source} for source in index["sources"]],
+        "findings": [{"section": heading, **finding} for heading, findings in accepted.items()
+                     for finding in findings],
         "artifact_sources": [{"type": item["type"], "value": item["value"],
                               "sources": list(dict.fromkeys(index["passages"][key]["source_url"]
                                                             for key in item["evidence_ids"]))}
