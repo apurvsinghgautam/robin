@@ -1572,6 +1572,8 @@ def build_server(cfg: Optional[RobinConfig] = None,
 
         After robin_scrape, summary must be evidence-selection JSON, using the
         supplied evidence IDs and short verbatim supporting quotations. Robin
+        also accepts model-selected artifacts as {type, value, evidence_ids},
+        checking each literal value against every cited source passage. It
         checks the quotations, identifiers and source provenance, then renders
         concise findings with numbered citations. These checks do not independently
         verify the meaning of a model's interpretation.

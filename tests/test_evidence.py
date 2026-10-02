@@ -27,6 +27,11 @@ def finding(text, key, quote):
     return {"text": text, "evidence": [{"evidence_id": key, "quote": quote}]}
 
 
+def artifact(kind, value, index):
+    return {"type": kind, "value": value, "evidence_ids": [
+        key for key, page in index["passages"].items() if value in page["quote"]]}
+
+
 class ReadableReports(unittest.TestCase):
     def setUp(self):
         self.fact = "The directory lists ransomware leak sites."
@@ -50,7 +55,8 @@ class ReadableReports(unittest.TestCase):
         self.assertEqual(check["findings"][0]["evidence"][0]["quote"], self.fact)
 
     def test_artifacts_deduplicate_sources_and_use_compact_numbered_citations(self):
-        report, check = evidence.render_report("query", selection(), self.index)
+        report, check = evidence.render_report("query", selection(
+            artifacts=[artifact("Email", EMAIL, self.index)]), self.index)
         source_list = report.split("## Source Links Referenced for Analysis", 1)[1].split(
             "## Investigation Artifacts", 1)[0]
         self.assertIn("1. [", source_list)
@@ -60,6 +66,9 @@ class ReadableReports(unittest.TestCase):
         self.assertIn("[1, 2]", artifacts)
         self.assertNotIn(SOURCE, artifacts)
         self.assertNotIn(FOLLOWUP_SOURCE, artifacts)
+        self.assertIn("- **Email:** " + EMAIL + " [1, 2]\n", artifacts)
+        self.assertNotIn("Context", artifacts)
+        self.assertNotIn("Contact:", artifacts)
         self.assertEqual(check["artifact_sources"][0]["sources"], [SOURCE, FOLLOWUP_SOURCE])
 
     def test_a_finding_cites_each_checked_supporting_page_once(self):
@@ -121,17 +130,20 @@ class ReadableReports(unittest.TestCase):
 class SourceMappings(unittest.TestCase):
     def test_a_hash_is_not_attributed_to_the_page_that_only_repeats_the_cve(self):
         index = evidence.build_evidence(PAGES.items())
-        report, check = evidence.render_report(QUERY, selection(index["passages"]), index)
+        report, check = evidence.render_report(QUERY, selection(index["passages"], artifacts=[
+            artifact(kind, value, index) for kind, value in
+            (("SHA-256", HASH), ("CVE", CVE), ("Email", EMAIL))]), index)
         mappings = {item["value"]: item["sources"] for item in check["artifact_sources"]}
         self.assertEqual(mappings[HASH], [SOURCE])
         self.assertEqual(mappings[CVE], [SOURCE, FOLLOWUP_SOURCE])
         self.assertEqual(mappings[EMAIL], [SOURCE, FOLLOWUP_SOURCE])
-        self.assertIn("Sample SHA-256: " + HASH, report)
+        self.assertIn("- **SHA-256:** " + HASH + " [1]", report)
         self.assertNotIn("proof of concept", report)
 
     def test_query_only_identifiers_are_never_discovered_artifacts(self):
         index = evidence.build_evidence([(SOURCE, "Contact: " + EMAIL + ".")])
-        report, check = evidence.render_report(QUERY, selection(index["passages"]), index)
+        report, check = evidence.render_report(QUERY, selection(index["passages"],
+            artifacts=[artifact("Email", EMAIL, index)]), index)
         self.assertEqual([item["value"] for item in check["artifact_sources"]], [EMAIL])
         artifacts = report.split("## Investigation Artifacts", 1)[1].split("## Key Insights", 1)[0]
         self.assertNotIn(CVE, artifacts)
@@ -162,6 +174,97 @@ class SourceMappings(unittest.TestCase):
         self.assertNotIn("Changed source passage", report)
 
 
+class ContextualArtifacts(unittest.TestCase):
+    def setUp(self):
+        self.index = evidence.build_evidence([
+            (SOURCE, "The listing provides files.txt as a downloadable file. "
+                     "Official directory mirror: directory.example. "
+                     "The forum is called Lantern Forum."),
+            (FOLLOWUP_SOURCE, "The mirror is directory.example.")])
+
+    def test_filename_is_a_file_and_model_selected_name_survives_without_a_regex(self):
+        selected = [artifact("Domain", "directory.example", self.index),
+                    artifact("File", "files.txt", self.index),
+                    artifact("Forum", "Lantern Forum", self.index)]
+        report, check = evidence.render_report("directory", selection(artifacts=selected), self.index)
+        self.assertIn("- **Domain:** directory.example [1, 2]", report)
+        self.assertIn("- **File:** files.txt [1]", report)
+        self.assertIn("- **Forum:** Lantern Forum [1]", report)
+        self.assertNotIn("**Domain:** files.txt", report)
+        self.assertNotIn("Context", report)
+        self.assertEqual(len(check["artifact_sources"]), 3)
+
+    def test_unselected_dotted_words_do_not_automatically_become_artifacts(self):
+        report, check = evidence.render_report("query", selection(), self.index)
+        artifacts = report.split("## Investigation Artifacts", 1)[1].split("## Key Insights", 1)[0]
+        self.assertNotIn("files.txt", artifacts)
+        self.assertNotIn("directory.example", artifacts)
+        self.assertEqual(check["artifact_sources"], [])
+
+    def test_artifact_support_is_retained_in_metadata_without_visible_quotes(self):
+        selected = artifact("Domain", "directory.example", self.index)
+        report, check = evidence.render_report("query", selection(artifacts=[selected]), self.index)
+        self.assertNotIn("Official directory mirror:", report)
+        saved = check["artifact_evidence"][0]
+        self.assertEqual(saved["value"], "directory.example")
+        self.assertEqual({entry["source_url"] for entry in saved["evidence"]}, {SOURCE, FOLLOWUP_SOURCE})
+        for entry in saved["evidence"]:
+            self.assertIn(saved["value"], entry["quote"])
+            self.assertIn(entry["quote"], self.index["passages"][entry["evidence_id"]]["quote"])
+
+    def test_fabricated_query_only_and_wrong_page_artifacts_are_rejected(self):
+        keys = list(self.index["passages"])
+        bad = [{"type": "Domain", "value": "forged.example", "evidence_ids": [keys[0]]},
+               {"type": "File", "value": "files.txt", "evidence_ids": [keys[1]]},
+               {"type": "Domain", "value": "directory.example", "evidence_ids": ["unknown"]},
+               {"type": "Domain", "value": "directory.example", "evidence_ids": []}]
+        report, check = evidence.render_report("forged.example", selection(artifacts=bad), self.index)
+        self.assertEqual(check["artifact_sources"], [])
+        self.assertEqual(sum(check["rejected"].values()), 4)
+        self.assertNotIn("- **Domain:**", report)
+
+    def test_duplicate_artifacts_merge_sources_without_repeating_a_bullet(self):
+        keys = list(self.index["passages"])
+        selected = [{"type": "Domain", "value": "directory.example", "evidence_ids": [key]}
+                    for key in keys]
+        report, check = evidence.render_report("query", selection(artifacts=selected), self.index)
+        self.assertEqual(report.count("- **Domain:** directory.example [1, 2]"), 1)
+        self.assertEqual(len(check["artifact_sources"]), 1)
+
+    def test_bad_artifact_shapes_are_omitted_without_hiding_valid_findings(self):
+        bad = [None, "files.txt", {}, {"type": "Domain", "value": "directory.example", "evidence_ids": "id"},
+               {"type": "Domain", "value": "directory.example", "evidence_ids": [None]},
+               {"type": "Domain", "value": "\n## Injected", "evidence_ids": list(self.index["passages"])}]
+        report, check = evidence.render_report("query", selection(artifacts=bad), self.index)
+        self.assertEqual(check["artifact_sources"], [])
+        self.assertEqual(sum(check["rejected"].values()), len(bad))
+        self.assertNotIn("\n## Injected", report)
+
+    def test_sentence_period_is_removed_from_an_identifier_but_filename_dots_survive(self):
+        wallet = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
+        index = evidence.build_evidence([(SOURCE,
+            "Directory mirror: directory.example. Bitcoin donation address: " + wallet + ".\n"
+            "Configuration file: .env. Organization: Example Inc.")])
+        selected = [artifact(kind, value, index) for kind, value in
+                    (("Domain", "directory.example."), ("Bitcoin address", wallet + "."),
+                     ("File", ".env"), ("Organization", "Example Inc."))]
+        report, check = evidence.render_report("query", selection(artifacts=selected), index)
+        self.assertIn("- **Domain:** directory.example [1]", report)
+        self.assertIn("- **Bitcoin address:** " + wallet + " [1]", report)
+        self.assertIn("- **File:** .env [1]", report)
+        self.assertIn("- **Organization:** Example Inc. [1]", report)
+        self.assertEqual(check["rejected"], {})
+
+    def test_long_literal_artifact_keeps_complete_support_in_metadata(self):
+        value = "a" * 280 + ".txt"
+        index = evidence.build_evidence([(SOURCE, "Published file: " + value + ".")])
+        _, check = evidence.render_report("query", selection(
+            artifacts=[artifact("File", value, index)]), index)
+        quote = check["artifact_evidence"][0]["evidence"][0]["quote"]
+        self.assertIn(value, quote)
+        self.assertIn(quote, index["passages"][next(iter(index["passages"]))]["quote"])
+
+
 class UntrustedSelections(unittest.TestCase):
     def setUp(self):
         self.index = evidence.build_evidence(PAGES.items())
@@ -180,7 +283,8 @@ class UntrustedSelections(unittest.TestCase):
     def test_malformed_or_ambiguous_json_fails_closed(self):
         for raw in ("## Key Insights\nThe hash is malicious.", "{}", "[]",
                     '{"sections":{},"sections":{"Key Insights":[]},"next_steps":[]}',
-                    '{"sections":{},"next_steps":"Search for proof"}'):
+                    '{"sections":{},"next_steps":"Search for proof"}',
+                    '{"sections":{},"next_steps":[],"artifacts":"files.txt"}'):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 evidence.render_report(QUERY, raw, self.index)
 

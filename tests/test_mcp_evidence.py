@@ -21,8 +21,10 @@ class HostEvidence(unittest.TestCase):
         self.assertIn("evidence_id:", body)
         return list(dict.fromkeys(re.findall(r"evidence_id: (E[0-9a-f]+-\d+)", body)))
 
-    async def save(self, session, keys, **extra):
-        summary = json.dumps({"sections": {"Key Insights": keys}, "next_steps": []})
+    async def save(self, session, keys, artifact_ids=None, **extra):
+        summary = json.dumps({"sections": {"Key Insights": keys}, "next_steps": [],
+            "artifacts": [{"type": "SHA-256", "value": HASH,
+                           "evidence_ids": keys[:1] if artifact_ids is None else artifact_ids}]})
         return text_of(await session.call_tool("robin_save_investigation", {
             "query": QUERY, "preset": "threat_intel", "summary": summary,
             "sources": [{"link": url} for url in PAGES], **extra}))
@@ -56,12 +58,14 @@ class HostEvidence(unittest.TestCase):
                     quote = "This is an unverified forum claim; no victims, ransomware group, cryptocurrency address, or exploitation date are given."
                     finding = {"text": "The advisory is an unverified forum claim and gives no victim or ransomware-group attribution.",
                                "evidence": [{"evidence_id": keys[0], "quote": quote}]}
-                    reply = await self.save(session, [finding])
+                    reply = await self.save(session, [finding], artifact_ids=keys[:1])
                     self.assertIn("status: ok", reply)
             run(body)
             saved = store.load_investigations(folder)[0]
             self.assertIn("no victim or ransomware-group attribution. [1]", saved["summary"])
             self.assertNotIn("Supporting source passages", saved["summary"])
+            self.assertNotIn("Context [", saved["summary"])
+            self.assertIn("- **SHA-256:** " + HASH + " [1]", saved["summary"])
             self.assertEqual(saved["evidence_check"]["accepted_findings"], 1)
             self.assertEqual(saved["evidence_check"]["findings"][0]["evidence"][0]["source_url"], SOURCE)
 

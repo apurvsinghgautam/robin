@@ -247,13 +247,16 @@ infrastructure rather than on your machine.
 
 ### Evidence grounding
 
-Robin extracts recognized technical identifiers and records the pages where
-they appear. The report model writes concise findings with short supporting
-quotations. Robin checks each quote against its cited passage and rejects
+The report model selects and classifies relevant artifacts from the source
+context; regex candidates are not automatically added to the report. Robin
+checks each artifact's literal value against its cited passages. The model
+also writes concise findings with short supporting quotations. Robin checks
+each quote against its cited passage and rejects
 identifiers or numeric facts absent from that support. Sources appear once in
 a numbered list, with compact references such as `[1, 2]` beside artifacts and
-findings. Checked quotes remain in the evidence metadata rather than appearing
-as raw page dumps. Proposed actions stay separate from findings. Invalid
+findings, without quoted context beside artifact values. Checked quotes remain
+in the evidence metadata rather than appearing as raw page dumps. Proposed
+actions stay separate from findings. Invalid
 findings are omitted, and malformed report selections fail without displaying
 or saving the unchecked draft. The report appears after these checks finish.
 

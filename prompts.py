@@ -47,7 +47,7 @@ PRESET_PROMPTS = {
     1. Analyze the Darkweb OSINT data provided using links and their raw text.
     2. Support each factual finding with a short verbatim passage from the INPUT and its source URL. Copy the passage exactly, without rewriting or ellipses. It must support the whole finding, including any claimed relationship or attribution. Identifiers appearing together or repeating across sources do not establish a connection or common author. The search query is a research target, not source evidence.
     3. Keep the analysis proportional to the evidence available in the supplied excerpts.
-    4. Provide intellgience artifacts along with their context visible in the data.
+    4. Select relevant intelligence artifacts from the context visible in the data.
     5. The artifacts can include indicators like name, email, phone, cryptocurrency addresses, domains, darkweb markets, forum names, threat actor information, malware names, TTPs, etc.
     6. Include only supported key insights, at most five. Do not repeat the artifact list as insights. Sparse evidence may yield fewer insights or none.
     7. Each insight should be specific, actionable, context-based, and data-driven.
@@ -66,7 +66,7 @@ PRESET_PROMPTS = {
     - every source link used for the analysis
 
     ## Investigation Artifacts
-    - each technical artifact with its context (name, email, phone, cryptocurrency address, domain, darkweb market, forum name, threat actor, malware name, TTP, etc.)
+    - each relevant artifact as a bullet with its type, value and source citation (name, email, phone, cryptocurrency address, domain, darkweb market, forum name, threat actor, malware name, TTP, etc.), without quoted source text
 
     ## Key Insights
     - each insight as its own bullet — specific, actionable, and evidence-based
@@ -102,7 +102,7 @@ PRESET_PROMPTS = {
     - every source link used for the analysis
 
     ## Malware / Ransomware Indicators
-    - each indicator as a bullet (hashes, C2s, payload names, TTPs)
+    - each relevant indicator as a bullet with its type, value and source citation (hashes, C2s, payload names, TTPs), without quoted source text
 
     ## Threat Actor Profile
     - group name, aliases, known victims, sector targeting — one bullet each
@@ -140,7 +140,7 @@ PRESET_PROMPTS = {
     - every source link used for the analysis
 
     ## Exposed PII Artifacts
-    - each artifact as a bullet (type, value, source context)
+    - each relevant artifact as a bullet (type, value, source citation), without quoted source text
 
     ## Breach / Marketplace Sources Identified
     - each breach or marketplace source as a bullet
@@ -181,7 +181,7 @@ PRESET_PROMPTS = {
     - every source link used for the analysis
 
     ## Leaked Corporate Artifacts
-    - each artifact as a bullet (credentials, documents, source code, databases)
+    - each relevant artifact as a bullet with its type, value and source citation (credentials, documents, source code, databases), without quoted source text
 
     ## Threat Actor / Broker Activity
     - each threat actor or broker activity as a bullet
@@ -238,13 +238,24 @@ def preset_sections(key):
 
 
 GROUNDING_SELECTION_PROMPT = """
-    Robin renders the Markdown report and extracts artifact provenance itself.
+    Robin renders the Markdown report and checks source provenance itself.
     For this call, return ONLY JSON instead of Markdown. This contract overrides
     the Markdown output instructions above:
-    {"sections": {"Key Insights": [{"text": "Concise supported finding", "evidence":
+    {"artifacts": [{"type": "Domain", "value": "exact source value", "evidence_ids": ["supplied ID"]}],
+     "sections": {"Key Insights": [{"text": "Concise supported finding", "evidence":
       [{"evidence_id": "supplied ID", "quote": "Short exact supporting passage"}]}]},
      "next_steps": ["proposed action"]}
     Each input source contains evidence_id/quote records. Use only supplied IDs.
+    Select and classify only artifacts relevant to the investigation, based on their
+    source context. Each value must be copied exactly from every cited passage.
+    Cite all supplied passages supporting that artifact. Use an empty artifacts list
+    when none are relevant; include at most 100. Types may include names, forums,
+    threat actors, malware, TTPs, files and technical identifiers. A dotted filename
+    such as files.txt is a file, not a domain. Do not collect every dotted word,
+    navigation label or unrelated value. Do not add context quotes, source URLs or
+    explanations to artifact values; the report displays only type, value and citations.
+    Copy identifiers without surrounding sentence punctuation; preserve punctuation
+    that belongs to a filename, URL or name.
     Allowed section names: {factual_sections}. Use an empty list for unsupported sections.
     Write zero to five distinct Key Insights. Other sections may contain up to twenty findings.
     Each text is one or two analytical sentences, at most 360 characters, that directly

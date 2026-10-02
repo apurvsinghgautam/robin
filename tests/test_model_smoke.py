@@ -12,9 +12,13 @@ from tests import model_smoke as smoke
 
 class InvestigationQuality(unittest.TestCase):
     def replay(self, extra_artifact="", irrelevant=""):
-        keys = list(build_evidence(smoke.PAGES.items())["passages"])
+        index = build_evidence(smoke.PAGES.items())
+        keys = list(index["passages"])
         report = json.dumps({"sections": {"Key Insights": keys + ([extra_artifact] if extra_artifact else [])},
-                             "next_steps": []})
+            "next_steps": [], "artifacts": [
+                {"type": kind, "value": value, "evidence_ids": [
+                    key for key, page in index["passages"].items() if value in page["quote"]]}
+                for kind, value in (("CVE", smoke.CVE), ("SHA-256", smoke.HASH), ("Email", smoke.EMAIL))]})
         answers = [smoke.QUERY, "2, 4", report, '["CVE-2026-12345 advisory"]',
                    irrelevant, "No Bitcoin address is provided in the source."]
         client = FakeMessagesListChatModel(responses=[AIMessage(content=[

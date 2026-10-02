@@ -35,7 +35,7 @@ _ARTIFACT_PATTERNS = (
 
 
 def extract_artifacts(text):
-    """Recognized literal identifiers; their presence does not establish a relationship."""
+    """Candidate identifiers for literal checks, not semantic classification or report inclusion."""
     found = []
     for kind, pattern in _ARTIFACT_PATTERNS:
         for match in pattern.finditer(text):
@@ -120,7 +120,8 @@ def _selection(raw):
     except (ValueError, TypeError) as exc:
         raise ValueError("the model did not return a valid evidence selection; no unchecked report was released") from exc
     if (not isinstance(selected, dict) or not isinstance(selected.get("sections"), dict)
-            or not isinstance(selected.get("next_steps"), list)):
+            or not isinstance(selected.get("next_steps"), list)
+            or not isinstance(selected.get("artifacts", []), list)):
         raise ValueError("the model's evidence selection needs sections and next_steps; no unchecked report was released")
     return selected
 
@@ -141,7 +142,7 @@ def _excerpt(text, value=""):
         boundary = line.find(" ", start, line.find(value))
         if boundary >= 0:
             start = boundary + 1
-    end = min(len(line), start + MAX_QUOTE_CHARS)
+    end = min(len(line), max(start + MAX_QUOTE_CHARS, line.find(value) + len(value)))
     if end < len(line):
         boundary = line.rfind(" ", max(start, line.find(value) + len(value)), end)
         if boundary > start:
@@ -208,6 +209,36 @@ def _citations(sources, numbers):
     return "[{}]".format(", ".join(str(number) for number in sorted({numbers[source] for source in sources})))
 
 
+def _selected_artifacts(items, index, rejected):
+    artifacts = {}
+    for item in items:
+        if not isinstance(item, dict):
+            rejected["invalid_artifact"] += 1
+            continue
+        kind, value, keys = item.get("type"), item.get("value"), item.get("evidence_ids")
+        if (not isinstance(kind, str) or not 1 <= len(kind.strip()) <= 60
+                or not isinstance(value, str) or not 1 <= len(value.strip()) <= 360
+                or "\n" in kind or "\n" in value or not isinstance(keys, list) or not keys):
+            rejected["invalid_artifact"] += 1
+            continue
+        kind, value = kind.strip(), value.strip()
+        value = next((candidate for _, candidate in extract_artifacts(value)
+                      if value == candidate + "."), value)
+        if any(not isinstance(key, str) or key not in index["passages"] for key in keys):
+            rejected["unknown_evidence"] += 1
+            continue
+        if any(value not in index["passages"][key]["quote"] for key in keys):
+            rejected["artifact_mismatch"] += 1
+            continue
+        identity = (kind, value)
+        if identity not in artifacts and len(artifacts) >= MAX_ARTIFACTS:
+            rejected["artifact_limit"] += 1
+            continue
+        artifact = artifacts.setdefault(identity, {"type": kind, "value": value, "evidence_ids": []})
+        artifact["evidence_ids"] = list(dict.fromkeys(artifact["evidence_ids"] + keys))
+    return list(artifacts.values())
+
+
 def render_report(query, raw, index, preset="threat_intel"):
     """Render concise findings after checking their quotations and source provenance.
 
@@ -238,18 +269,13 @@ def render_report(query, raw, index, preset="threat_intel"):
     lines = ["## " + headings[0], "", _literal(query), "", "## " + headings[1], ""]
     lines.extend(_source_link(numbers[source], source) for source in index["sources"])
     lines.extend(["", "## " + headings[2], ""])
-    lines.append("Observed identifiers; their presence does not establish a relationship or attribution.")
-    lines.append("")
-    artifacts = index["artifacts"][:MAX_ARTIFACTS]
+    artifacts = _selected_artifacts(selected.get("artifacts", []), index, rejected)
     for artifact in artifacts:
         sources = [index["passages"][key]["source_url"] for key in artifact["evidence_ids"]]
-        first = index["passages"][artifact["evidence_ids"][0]]
-        context = _excerpt(first["quote"], artifact["value"])
-        lines.append("- **{}:** {} {} — Context {}: “{}”".format(
-            artifact["type"], _literal(artifact["value"]), _citations(sources, numbers),
-            _citations([first["source_url"]], numbers), _literal(context)))
+        lines.append("- **{}:** {} {}".format(
+            _literal(artifact["type"]), _literal(artifact["value"]), _citations(sources, numbers)))
     if not artifacts:
-        lines.append("No recognized technical identifiers in the supplied excerpts.")
+        lines.append("No relevant artifacts identified in the supplied pages.")
     for heading in factual:
         lines.extend(["", "## " + heading, ""])
         findings = accepted.get(heading, [])
@@ -279,8 +305,8 @@ def render_report(query, raw, index, preset="threat_intel"):
     lines.extend(["", "Findings describe the supplied pages; source claims have not been independently verified."])
     if rejected:
         lines.append("{} invalid evidence selection(s) or proposed action(s) omitted.".format(sum(rejected.values())))
-    if len(index["artifacts"]) > MAX_ARTIFACTS:
-        lines.append("Artifact listing limited to the first {} identifiers.".format(MAX_ARTIFACTS))
+    if rejected["artifact_limit"]:
+        lines.append("Artifact listing limited to {} identifiers.".format(MAX_ARTIFACTS))
     metadata = {
         "status": "source_matched", "format": "grounded-findings-v2",
         "accepted_findings": sum(len(findings) for findings in accepted.values()),
@@ -292,6 +318,10 @@ def render_report(query, raw, index, preset="threat_intel"):
                               "sources": list(dict.fromkeys(index["passages"][key]["source_url"]
                                                             for key in item["evidence_ids"]))}
                              for item in artifacts],
+        "artifact_evidence": [{"type": item["type"], "value": item["value"], "evidence": [
+            {"evidence_id": key, "source_url": index["passages"][key]["source_url"],
+             "quote": _excerpt(index["passages"][key]["quote"], item["value"])}
+            for key in item["evidence_ids"]]} for item in artifacts],
     }
     report = "\n".join(lines).strip()
     if len(report) > MAX_REPORT_CHARS:
