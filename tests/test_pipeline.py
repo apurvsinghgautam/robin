@@ -80,7 +80,7 @@ class PipelineTestCase(unittest.TestCase):
                 ("get_llm", lambda model, cfg=None: StubLLM(model)),
                 ("refine_query", lambda llm, query: query + " dump"),
                 ("filter_results", self._filter),
-                ("generate_summary_detailed", lambda *a, **k: (self.generate(*a, **k), {})),
+                ("generate_summary", lambda *a, **k: self.generate(*a, **k)),
                 ("suggest_pivots", lambda *a, **k: ["acme vendor leak"])):
             patcher = mock.patch.object(pipeline, name, side_effect=stub)
             patcher.start()
@@ -161,14 +161,14 @@ class ACompletedRun(PipelineTestCase):
         searched.assert_called_once_with("acme breach dump", max_workers=3)
         scraped.assert_called_once_with(RESULTS[:2], max_workers=3, max_return_chars=9000)
 
-    def test_only_the_checked_return_value_reaches_the_token_callback(self):
-        cases = [
+    def test_the_summary_is_the_stream_or_else_the_return_value(self):
+        cases = [  # (case, generate_summary, summary, what the token callback saw)
             ("streamed", streaming_summary(), "## Findings\n- a finding",
              "## Findings\n- a finding"),
-            ("nothing streamed", silent_summary("returned"), "returned", "returned"),
+            ("nothing streamed", silent_summary("returned"), "returned", ""),
             ("both", streaming_summary("returned", ("streamed ", "text")),
-             "returned", "returned"),
-            ("whitespace streamed", streaming_summary("returned", ("  \n",)), "returned", "returned"),
+             "streamed text", "streamed text"),
+            ("whitespace streamed", streaming_summary("returned", ("  \n",)), "returned", "  \n"),
         ]
         for name, generate, summary, streamed in cases:
             with self.subTest(name):
@@ -230,7 +230,7 @@ class ARunThatFails(PipelineTestCase):
             ("search", "search the dark web", "search_fn"),
             ("filter", "filter the search results", "filter_results"),
             ("scrape", "scrape the selected pages", "scrape_fn"),
-            ("summarize", "generate the investigation summary", "generate_summary_detailed"),
+            ("summarize", "generate the investigation summary", "generate_summary"),
         ]
         for stage, action, target in cases:
             with self.subTest(stage):

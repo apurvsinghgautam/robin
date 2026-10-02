@@ -235,8 +235,6 @@ class CapturingChatModel(BaseChatModel):
             reply = "1, 2"
         elif "SEARCH QUERIES" in system:
             reply = '["acme pivot"]'
-        elif "Robin renders the Markdown report" in system:
-            reply = '{"sections": {}, "next_steps": []}'
         else:
             reply = "## Findings\n- a finding"
         return ChatResult(generations=[ChatGeneration(message=AIMessage(content=reply))])

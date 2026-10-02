@@ -16,11 +16,12 @@ from config import (
 )
 from llm import (
     filter_results,
-    generate_summary_detailed,
+    generate_summary,
     get_llm,
     refine_query,
     suggest_pivots,
 )
+from llm_utils import BufferedStreamingHandler, response_text
 from prompts import PRESETS
 from scrape import scrape_multiple
 from search import engines_unreachable, get_search_results_detailed
@@ -95,7 +96,6 @@ class Investigation:
     filtered: List[dict] = field(default_factory=list)
     scraped: dict = field(default_factory=dict)
     summary: str = ""
-    evidence_check: dict = field(default_factory=dict)
     pivots: List[str] = field(default_factory=list)
     model: str = ""
     preset: str = DEFAULT_PRESET
@@ -136,7 +136,6 @@ class Investigation:
             "threads": self.threads,
             "pivots": self.pivots,
             "finished_at": self.finished_at,
-            "evidence_check": self.evidence_check,
         }
 
 
@@ -251,20 +250,29 @@ def run_investigation(cfg: Optional[RobinConfig],
         # save: there is nothing to write them from.
         return _finish(inv, STATUS_NOTHING_READABLE)
 
-    # Stage 6 - summarize. Release only the report built from checked evidence.
+    # Stage 6 - summarize, streaming through the caller's callback
     stage("summarize")
-    llm.callbacks = []
+    streamed = {"text": ""}
+
+    def _emit(chunk: str) -> None:
+        streamed["text"] += chunk
+        if on_token:
+            on_token(chunk)
+
+    llm.callbacks = [BufferedStreamingHandler(ui_callback=_emit)]
     try:
-        inv.summary, inv.evidence_check = generate_summary_detailed(
-            llm, query, inv.scraped, preset=preset,
-            custom_instructions=custom_instructions)
+        returned = generate_summary(llm, query, inv.scraped, preset=preset,
+                                    custom_instructions=custom_instructions)
     except Exception as exc:
         raise PipelineError("summarize", exc) from exc
 
+    # Reasoning models (OpenAI o1, DeepSeek R1 and similar) may stream no answer
+    # tokens, leaving the streamed buffer empty; generate_summary's return value
+    # still holds the answer, so it is the fallback.
+    streamed_text = response_text(streamed["text"])
+    inv.summary = streamed_text if streamed_text.strip() else response_text(returned)
     if not inv.summary.strip():
         raise PipelineError("summarize", RuntimeError("the model returned an empty report"))
-    if on_token:
-        on_token(inv.summary)
 
     # Pivots are a convenience and never block a finished investigation. A
     # fresh client, so the structured JSON is not streamed to the caller.

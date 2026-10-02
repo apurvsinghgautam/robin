@@ -404,7 +404,6 @@ if saved_investigations:
                 "sources": _saved.get("sources", []),
                 "scraped": None,  # The raw scrape is not saved to disk.
                 "summary": _saved.get("summary", ""),
-                "evidence_check": _saved.get("evidence_check", {}),
                 "results_count": _saved.get("results_count",
                                             len(_saved.get("sources", []))),
                 "content_chars": _saved.get("content_chars"),
@@ -459,8 +458,6 @@ def _render_investigation_body(inv):
         for i, item in enumerate(sources, 1):
             st.markdown(f"{i}. [{item.get('title', 'Untitled')}]({item.get('link', '')})")
     st.subheader(":red[🔎 Findings]", anchor=None, divider="gray")
-    if (inv.get("evidence_check") or {}).get("status") != "source_matched":
-        st.caption("Source evidence was not checked by Robin for this saved report.")
     summary = inv.get("summary", "") or ""
     st.markdown(summary)
     if summary:
@@ -784,7 +781,6 @@ if _do_run:
         "sources": investigation.filtered,
         "scraped": investigation.scraped,
         "summary": investigation.summary,
-        "evidence_check": investigation.evidence_check,
         "results_count": len(investigation.results),
         "content_chars": content_chars,
         "max_scrape": max_scrape,

@@ -485,27 +485,17 @@ BOILERPLATE_TAGS = ["nav", "header", "footer", "aside"]
 def extract_page_text(html):
     """Return a page's readable text with structural furniture removed.
 
-    Falls back when stripping leaves too little text and no explicit main/article
-    content remains (see MIN_STRIPPED_RATIO).
+    Falls back to the unstripped text when the strip leaves too little of it
+    (see MIN_STRIPPED_RATIO).
     """
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style"]):
         tag.extract()
-    for tag in soup(["p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6",
-                     "section", "article", "blockquote", "pre", "br", "hr"]):
-        tag.insert_before("\n")
-        tag.insert_after("\n")
-    for tag in soup(["td", "th"]):
-        tag.insert_before(" ")
-        tag.insert_after(" ")
-    full_text = '\n'.join(' '.join(line.split()) for line in soup.get_text().splitlines()
-                          if line.strip())
+    full_text = ' '.join(soup.get_text(separator=' ').split())
     for tag in soup(BOILERPLATE_TAGS):
         tag.extract()
-    text = '\n'.join(' '.join(line.split()) for line in soup.get_text().splitlines()
-                     if line.strip())
-    has_body = any(tag.get_text().strip() for tag in soup(["main", "article"]))
-    if len(text) < MIN_STRIPPED_RATIO * len(full_text) and not has_body:
+    text = ' '.join(soup.get_text(separator=' ').split())
+    if len(text) < MIN_STRIPPED_RATIO * len(full_text):
         return full_text
     return text
 
