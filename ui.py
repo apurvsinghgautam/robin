@@ -177,10 +177,8 @@ if not model_options:
     if _configured:
         st.error(
             "⛔ **Could not load models for: {}.**\n\n"
-            "The key is set, so this is usually the provider being unreachable: "
-            "no network, an outage, or an expired key. Robin falls back to a "
-            "bundled model list, but it does not carry every provider.\n\n"
-            "Retry once you have a connection, or add a second provider's key. "
+            "Check the provider's availability and model access for this key, "
+            "then refresh the model list. "
             "See TROUBLESHOOTING.md.".format(", ".join(_configured))
         )
     elif Path(__file__).with_name(".env").is_dir():
@@ -266,6 +264,7 @@ _providers = [
     ("OpenAI",      _robin_cfg.openai_api_key,     True),
     ("Anthropic",   _robin_cfg.anthropic_api_key,  True),
     ("Google",      _robin_cfg.google_api_key,     True),
+    ("Mistral",     _robin_cfg.mistral_api_key,    True),
     ("OpenRouter",  _robin_cfg.openrouter_api_key, True),
     ("Ollama",      _robin_cfg.ollama_base_url,    False),
     ("llama.cpp",   _robin_cfg.llama_cpp_base_url, False),

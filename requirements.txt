@@ -14,7 +14,4 @@ langchain-mistralai==1.1.6
 openai==3.22.1
 anthropic==1.11.0
 google-genai==2.26.0
-# Pinned exactly: 1.30.0 is the last 1.x, whose FastMCP API every MCP host and
-# doc targets. 2.x renames it to MCPServer and drops the in-memory test client
-# the MCP tests use, so upgrading is a deliberate migration.
 mcp==1.30.0

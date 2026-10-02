@@ -51,6 +51,8 @@ def check_llm_health(model_choice, cfg: Optional[RobinConfig] = None):
     ctor = model_cfg.get("constructor_params", {}) or {}
     if "ChatAnthropic" in class_name:
         provider = "Anthropic"
+    elif "ChatMistralAI" in class_name:
+        provider = "Mistral"
     elif "ChatGoogleGenerativeAI" in class_name:
         provider = "Google Gemini"
     elif "ChatOllama" in class_name:

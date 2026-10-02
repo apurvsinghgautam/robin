@@ -6,10 +6,7 @@ from langchain_ollama import ChatOllama
 from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
-try:  # Optional: only needed when a Mistral key is configured.
-    from langchain_mistralai import ChatMistralAI
-except ImportError:  # pragma: no cover
-    ChatMistralAI = None
+from langchain_mistralai import ChatMistralAI
 import model_registry
 from langchain_core.callbacks.base import BaseCallbackHandler
 import hashlib
@@ -160,8 +157,6 @@ def _provider_constructor(provider: str, model_name: str,
                 "constructor_params": {"model": model_name,
                                        "google_api_key": cfg.google_api_key}}
     if provider == "mistral":
-        if ChatMistralAI is None:
-            return None
         return {"class": ChatMistralAI,
                 "constructor_params": {"model": model_name,
                                        "api_key": cfg.mistral_api_key}}

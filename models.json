@@ -75,6 +75,11 @@
       "gemini-omni-flash-preview",
       "gemini-pro-latest"
     ],
+    "mistral": [
+      "mistral-small-2603",
+      "mistral-medium-3-5",
+      "mistral-large-2512"
+    ],
     "openai": [
       "gpt-6-astra",
       "gpt-5.6-luna",

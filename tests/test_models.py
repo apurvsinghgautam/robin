@@ -68,6 +68,34 @@ class RegistryTestCase(unittest.TestCase):
         return json.loads(self.cache_path.read_text())
 
 
+class MistralCatalogue(RegistryTestCase):
+    def test_a_first_run_outage_still_offers_resolvable_chat_models(self):
+        cfg = RobinConfig(mistral_api_key="test-mistral", ollama_base_url=None)
+        seed = Path(model_registry.__file__).with_name("models.json")
+        with mock.patch.object(model_registry, "SEED_PATH", seed), \
+                mock.patch.object(model_registry, "_get_json", side_effect=RuntimeError("provider unreachable")):
+            entries = model_registry.get_entries(cfg)
+        self.assertTrue(entries)
+        self.assertEqual({entry["provider"] for entry in entries}, {"mistral"})
+        chosen = llm_utils.default_model([entry["key"] for entry in entries])
+        with mock.patch.object(llm_utils, "_registry_entries", return_value=entries):
+            client = llm.get_llm(chosen, cfg)
+        self.assertIsInstance(client, llm_utils.ChatMistralAI)
+        self.assertEqual(client.model, chosen)
+
+    def test_live_discovery_uses_the_configured_key_and_keeps_chat_models(self):
+        cfg = RobinConfig(mistral_api_key="test-mistral", ollama_base_url=None)
+        catalogue = {"data": [
+            {"id": "mistral-chat", "capabilities": {"completion_chat": True}},
+            {"id": "mistral-embed", "capabilities": {"completion_chat": False}},
+            {"id": "mistral-ocr", "capabilities": {"completion_chat": False}},
+        ]}
+        with mock.patch.object(model_registry, "_get_json", return_value=catalogue) as fetch:
+            self.assertEqual(model_registry._fetch_mistral(cfg), ["mistral-chat"])
+        fetch.assert_called_once_with(model_registry.MISTRAL_API + "/models",
+                                      {"Authorization": "Bearer test-mistral"})
+
+
 class ModelShutdownDates(RegistryTestCase):
     def setUp(self):
         super().setUp()
