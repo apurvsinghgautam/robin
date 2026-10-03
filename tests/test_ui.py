@@ -6,6 +6,7 @@ execute the few pieces with logic of their own against stand-ins for `st`.
 import ast
 import unittest
 from contextlib import ExitStack
+from types import SimpleNamespace
 
 import pipeline
 import search
@@ -74,6 +75,62 @@ class ThePageRunsThePipeline(unittest.TestCase):
         self.assertNotIn("st.sidebar.", block)
         self.assertEqual(block.count("st.error("), 3)
         self.assertIn('with_name(".env").is_dir()', block)
+
+
+class PipelineErrorGuidance(unittest.TestCase):
+    """Provider names never turn unrelated failures into API-key advice."""
+
+    def render(self, message, status=None):
+        shown = []
+        error = RuntimeError(message)
+        error.status_code = status
+        ui = load_from_ui({"_render_pipeline_error"}, {
+            "st": SimpleNamespace(error=shown.append, stop=lambda: None)})
+        ui["_render_pipeline_error"]("refine the query", error)
+        self.assertEqual(len(shown), 1)
+        self.assertIn(message, shown[0])
+        return shown[0]
+
+    def test_parameter_errors_keep_the_provider_error_and_explain_the_setting(self):
+        for message in ("Anthropic: `temperature` is deprecated for this model.",
+                        "OpenAI gpt-6: unsupported parameter top_p",
+                        "Gemini: thinking_budget is not supported",
+                        "got an unexpected keyword argument 'temperature'"):
+            with self.subTest(message=message):
+                shown = self.render(message, 400)
+                self.assertIn("rejected a request setting", shown)
+                self.assertNotIn("re-copy", shown)
+                self.assertNotIn("Confirm the selected provider's API key", shown)
+
+    def test_context_quota_and_authentication_have_their_own_hints(self):
+        for message, status, expected in (
+                ("OpenAI gpt-6 context_length exceeded", 400, "Content per Page"),
+                ("Anthropic maximum context exceeded", 400, "Content per Page"),
+                ("Google resource has been exhausted", 429, "quota"),
+                ("402 RESOURCE_EXHAUSTED: Your prepayment credits are depleted", None, "billing"),
+                ("OpenRouter credits quota exhausted", 402, "quota"),
+                ("Unauthenticated", 401, "API key"),
+                ("Access denied", 403, "access to this model"),
+                ("Anthropic model selected but `ANTHROPIC_API_KEY` is not set", None, "API key"),
+                ("Invalid request body", 400, "provider rejected the request"),
+                ("OpenAI model_not_found", 404, "Refresh the model list")):
+            with self.subTest(message=message):
+                shown = self.render(message, status)
+                self.assertIn(expected, shown)
+                if expected in ("Content per Page", "quota"):
+                    self.assertNotIn("API key", shown)
+
+    def test_retirement_errors_explain_selecting_an_active_model(self):
+        for message, status in (
+                ("The model gpt-5.3-chat-latest has been deprecated; model_not_found", 404),
+                ("This model has been shut down", 404),
+                ("The selected model is retired", None)):
+            with self.subTest(message=message):
+                shown = self.render(message, status)
+                self.assertIn("Select an active model", shown)
+                self.assertIn("cannot restore a retired model", shown)
+                self.assertNotIn("Refresh the model list or restart Robin", shown)
+
 
 class _FakeCache:
     """`st.cache_data` with a per-arguments `.clear`, recording every real call."""

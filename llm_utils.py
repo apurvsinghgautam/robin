@@ -6,10 +6,7 @@ from langchain_ollama import ChatOllama
 from typing import Callable, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
-try:  # Optional: only needed when a Mistral key is configured.
-    from langchain_mistralai import ChatMistralAI
-except ImportError:  # pragma: no cover
-    ChatMistralAI = None
+from langchain_mistralai import ChatMistralAI
 import model_registry
 from langchain_core.callbacks.base import BaseCallbackHandler
 import hashlib
@@ -29,6 +26,35 @@ class BufferedStreamingHandler(BaseCallbackHandler):
         self.buffer = ""
         self.buffer_limit = buffer_limit
         self.ui_callback = ui_callback
+        self._pending = ""
+        self._thought_end = None
+        self._answer_started = False
+
+    def _answer_token(self, token: str) -> str:
+        if self._answer_started:
+            return token
+        self._pending += token
+        while True:
+            if self._thought_end:
+                end = self._pending.lower().find(self._thought_end)
+                if end < 0:
+                    self._pending = self._pending[-len(self._thought_end):]
+                    return ""
+                self._pending = self._pending[end + len(self._thought_end):]
+                self._thought_end = None
+            prefix = self._pending.lstrip().lower()
+            for tag in ("think", "thinking"):
+                opening = "<" + tag + ">"
+                if prefix.startswith(opening):
+                    self._pending = self._pending.lstrip()[len(opening):]
+                    self._thought_end = "</" + tag + ">"
+                    break
+            else:
+                if not prefix or any(opening.startswith(prefix) for opening in ("<think>", "<thinking>")):
+                    return ""
+                self._answer_started = True
+                answer, self._pending = self._pending, ""
+                return answer
 
     def _flush(self) -> None:
         if not self.buffer:
@@ -39,33 +65,67 @@ class BufferedStreamingHandler(BaseCallbackHandler):
         self.buffer = ""
 
     def on_llm_new_token(self, token: str, **kwargs) -> None:
+        chunk = kwargs.get("chunk")
+        content = getattr(getattr(chunk, "message", None), "content", None)
+        if isinstance(content, list):
+            token = _content_text(content)
+        token = self._answer_token(token)
         self.buffer += token
         if "\n" in token or len(self.buffer) >= self.buffer_limit:
             self._flush()
 
     def on_llm_end(self, response, **kwargs) -> None:
+        if not self._thought_end and not self._pending.strip():
+            self.buffer += self._pending
+        self._pending = ""
         self._flush()
+        self._thought_end = None
+        self._answer_started = False
+
+    def on_llm_error(self, error, **kwargs) -> None:
+        self.buffer = ""
+        self._pending = ""
+        self._thought_end = None
+        self._answer_started = False
 
 
 # --- Configuration Data ---
 _common_callbacks = [BufferedStreamingHandler(buffer_limit=60)]
 
-# Parameters every client gets. temperature is deliberately NOT here: OpenAI's
-# reasoning and gpt-5 family reject an explicit temperature outright.
+# Leave sampling to each model's defaults; current reasoning models can reject
+# overrides or perform worse with them.
 _common_llm_params = {
     "streaming": True,
     "callbacks": _common_callbacks,
 }
 
-# OpenAI families that accept an explicit temperature. An allowlist rather
-# than a denylist of reasoning models: omitting temperature always works,
-# sending it to a model that refuses it does not.
-_TEMPERATURE_OK = re.compile(r"^(gpt-3\.5|gpt-4|chatgpt-4)", re.IGNORECASE)
+_THINKING_PREFIX = re.compile(r"^\s*<(think|thinking)>.*?</\1>\s*", re.I | re.S)
 
 
-def _openai_temperature(model_name: str) -> dict:
-    bare = model_name.split("/", 1)[-1]
-    return {"temperature": 0} if _TEMPERATURE_OK.match(bare) else {}
+def _content_text(response) -> str:
+    """Read text blocks, leaving inline prefixes for the caller to handle."""
+    content = getattr(response, "content", response)
+    if isinstance(content, list):
+        content = "".join(
+            block if isinstance(block, str) else block.get("text", "")
+            for block in content
+            if isinstance(block, str) or (
+                isinstance(block, dict) and block.get("type") in ("text", "output_text")
+                and isinstance(block.get("text"), str)
+            )
+        )
+    return content if isinstance(content, str) else ""
+
+
+def response_text(response) -> str:
+    """Read answer text, excluding reasoning blocks and local <think> prefixes."""
+    content = _content_text(response)
+    while _THINKING_PREFIX.match(content):
+        content = _THINKING_PREFIX.sub("", content, count=1)
+    # A truncated reasoning prefix has no final answer to pass downstream.
+    if re.match(r"^\s*<(think|thinking)>", content, re.I):
+        return ""
+    return content
 
 # `model_registry` asks each provider what it currently serves; the functions
 # below only say how to construct a client once a model has been chosen.
@@ -87,32 +147,24 @@ def _provider_constructor(provider: str, model_name: str,
     if provider == "openai":
         return {"class": ChatOpenAI,
                 "constructor_params": dict(model_name=model_name,
-                                           **_api_key(cfg.openai_api_key),
-                                           **_openai_temperature(model_name))}
+                                           **_api_key(cfg.openai_api_key))}
     if provider == "anthropic":
         return {"class": ChatAnthropic,
-                "constructor_params": {"model": model_name, "temperature": 0,
+                "constructor_params": {"model": model_name,
                                        **_api_key(cfg.anthropic_api_key)}}
     if provider == "google":
         return {"class": ChatGoogleGenerativeAI,
-                "constructor_params": {"model": model_name, "temperature": 0,
+                "constructor_params": {"model": model_name,
                                        "google_api_key": cfg.google_api_key}}
     if provider == "mistral":
-        if ChatMistralAI is None:
-            return None
         return {"class": ChatMistralAI,
-                "constructor_params": {"model": model_name, "temperature": 0,
+                "constructor_params": {"model": model_name,
                                        "api_key": cfg.mistral_api_key}}
     if provider == "openrouter":
-        # An OpenRouter id carries its vendor as a prefix, so the same rule
-        # applies to the OpenAI models served through it.
         return {"class": ChatOpenAI,
                 "constructor_params": dict(model_name=model_name,
                                            base_url=_openrouter_base(cfg),
-                                           api_key=cfg.openrouter_api_key,
-                                           **(_openai_temperature(model_name)
-                                              if model_name.startswith("openai/")
-                                              else {"temperature": 0}))}
+                                           api_key=cfg.openrouter_api_key)}
     return None
 
 
@@ -294,7 +346,6 @@ def resolve_model_config(model_choice: str, cfg: Optional[RobinConfig] = None):
                 "class": ChatOpenAI,
                 "constructor_params": {
                     "model_name": llama_model,
-                    "temperature": 0,
                     "base_url": base,
                     # A placeholder, never the OpenAI key: llama.cpp ignores it
                     # and the endpoint is not OpenAI's to send a live key to.
@@ -318,7 +369,6 @@ def resolve_model_config(model_choice: str, cfg: Optional[RobinConfig] = None):
                 "class": ChatOpenAI,
                 "constructor_params": {
                     "model_name": custom_model,
-                    "temperature": 0,
                     "base_url": base,
                     "api_key": cfg.custom_api_key or "sk-custom",
                     "streaming": False,
@@ -331,7 +381,6 @@ def resolve_model_config(model_choice: str, cfg: Optional[RobinConfig] = None):
                 "class": ChatOllama,
                 "constructor_params": {
                     "model": ollama_model,
-                    "temperature": 0,
                     "base_url": cfg.ollama_base_url,
                     # Without this, Ollama's own default window applies and the
                     # tail of every investigation is dropped before the model

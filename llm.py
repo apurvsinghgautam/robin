@@ -2,8 +2,7 @@ import re
 import json
 import openai
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.output_parsers import StrOutputParser
-from llm_utils import _common_llm_params, resolve_model_config, get_model_choices
+from llm_utils import ChatOpenAI, _common_llm_params, resolve_model_config, get_model_choices, response_text
 from config import RobinConfig
 from scrape import fence_overhead, fence_untrusted
 # Prompt text lives in prompts.py, so the MCP server serves the exact words
@@ -45,6 +44,10 @@ def get_llm(model_choice, cfg: Optional[RobinConfig] = None):
 
     # Model-specific parameters win, e.g. a local endpoint's streaming=False.
     all_params = {**_common_llm_params, **model_specific_params}
+    if llm_class is ChatOpenAI:
+        # None is omitted on the wire, including for o1, where LangChain would
+        # otherwise insert temperature=1 even when Robin supplies no value.
+        all_params["temperature"] = None
 
     _ensure_credentials(model_choice, llm_class, model_specific_params, cfg)
 
@@ -80,10 +83,21 @@ def _ensure_credentials(model_choice: str, llm_class, model_params: dict,
             _require(cfg.openrouter_api_key, "OPENROUTER_API_KEY", "OpenRouter")
         elif base_url and ("localhost" in base_url or "127.0.0.1" in base_url):
             pass  # A local model needs no API key.
+        elif cfg.llama_cpp_base_url and base_url.rstrip("/") in (
+                cfg.llama_cpp_base_url.lower().rstrip("/"),
+                cfg.llama_cpp_base_url.lower().rstrip("/") + "/v1"):
+            pass  # llama.cpp can also run on another host on the LAN.
         elif custom_api_base_url and base_url and custom_api_base_url.lower().rstrip("/") in base_url:
             pass  # A custom provider's API key is optional.
         else:
             _require(cfg.openai_api_key, "OPENAI_API_KEY", "OpenAI")
+
+
+_QUERY_IDENTIFIER_RE = re.compile(
+    r"\bCVE-\d{4}-\d{4,}\b|\b(?:[a-f0-9]{64}|[a-f0-9]{40}|[a-f0-9]{32})\b|"
+    r"[\w.+-]+@[\w.-]+\.[a-z]{2,}|\b[a-z2-7]{16,56}\.onion\b|"
+    r"\b0x[a-f0-9]{40}\b|\b(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{25,90})\b|"
+    r"(?<!\w)@[\w.-]+", re.I)
 
 
 def refine_query(llm, user_input):
@@ -91,8 +105,13 @@ def refine_query(llm, user_input):
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{query}")]
     )
-    chain = prompt_template | llm | StrOutputParser()
-    return chain.invoke({"query": user_input})
+    chain = prompt_template | llm | response_text
+    refined = chain.invoke({"query": user_input})
+    if not refined.strip() or any(identifier not in refined
+                                  for identifier in _QUERY_IDENTIFIER_RE.findall(user_input)):
+        logging.getLogger(__name__).warning("Model refinement lost query content; using the original query.")
+        return user_input
+    return refined
 
 
 # A range lives on one line, so in "- 3\n- 9" the bullet hyphen is not read
@@ -167,7 +186,7 @@ def filter_results_detailed(llm, query, results, limit=20):
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{results}")]
     )
-    chain = prompt_template | llm | StrOutputParser()
+    chain = prompt_template | llm | response_text
     try:
         result_indices = chain.invoke({"query": query, "results": final_str})
     except openai.RateLimitError as e:
@@ -294,7 +313,7 @@ def generate_summary(llm, query, content, preset="threat_intel", custom_instruct
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{content}")]
     )
-    chain = prompt_template | llm | StrOutputParser()
+    chain = prompt_template | llm | response_text
     return chain.invoke(invoke_vars)
 
 
@@ -403,7 +422,7 @@ def answer_followup(llm, question, context, history=None, preset="threat_intel",
             ("user", "{question}"),
         ]
     )
-    chain = prompt_template | llm | StrOutputParser()
+    chain = prompt_template | llm | response_text
     return chain.invoke({
         "persona": persona,
         "context": context,
@@ -429,7 +448,7 @@ def suggest_pivots(llm, query, content, preset="threat_intel", max_pivots=5):
     prompt_template = ChatPromptTemplate(
         [("system", system_prompt), ("user", "{content}")]
     )
-    chain = prompt_template | llm | StrOutputParser()
+    chain = prompt_template | llm | response_text
     try:
         raw = chain.invoke({"query": query, "content": raw_content})
     except Exception as e:

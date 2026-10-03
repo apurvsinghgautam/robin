@@ -8,6 +8,7 @@ import re
 import sys
 import tempfile
 import time
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -114,19 +115,19 @@ def _get_json(url: str, headers: Optional[Dict[str, str]] = None):
 
 
 # --- Per-provider fetchers -------------------------------------------------
-# Each returns a list of provider-side model ids, already filtered to chat.
+# Each returns chat model IDs or records carrying their shutdown dates.
 
 
-def _fetch_openai(cfg: RobinConfig) -> List[str]:
-    """OpenAI exposes no capability field, so filter by token."""
+def _fetch_openai(cfg: RobinConfig) -> List[dict]:
+    """Keep shutdown metadata; retired models can still appear in this catalogue."""
     data = _get_json(
         OPENAI_API + "/models",
         {"Authorization": "Bearer {}".format(cfg.openai_api_key)},
     )
     return sorted(
-        (m["id"] for m in data.get("data", [])
+        ({key: m[key] for key in ("id", "shutdown_date") if key in m} for m in data.get("data", [])
          if m.get("id") and not _looks_non_chat(m["id"], "openai")),
-        key=_version_sort_key,
+        key=lambda model: _version_sort_key(model["id"]),
     )
 
 
@@ -264,9 +265,79 @@ def _load_json_file(path: Path) -> Optional[dict]:
     return payload if isinstance(payload, dict) else None
 
 
+def _shutdown_date(value):
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value).isoformat()
+        except ValueError:
+            pass
+    return None
+
+
+def _shutdown_dates(payload):
+    values = payload.get("shutdown_dates") or {}
+    if not isinstance(values, dict):
+        return {}
+    return {provider: {model: parsed for model, value in dates.items()
+                       if isinstance(model, str) and ((parsed := _shutdown_date(value)) or value is None)}
+            for provider, dates in values.items() if isinstance(dates, dict)}
+
+
+def _shutdown_metadata_stamp(value):
+    if isinstance(value, str):
+        try:
+            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            return _shutdown_metadata_stamp(stamp.timestamp())
+        except (ValueError, OverflowError, OSError):
+            return 0.0
+    if isinstance(value, (int, float)) and not isinstance(value, bool) \
+            and 0 <= value < float("inf"):
+        return value
+    return 0.0
+
+
+def _merge_shutdown_dates(seed, cached, cfg):
+    merged = _shutdown_dates(seed)
+    seed_stamp = (_shutdown_metadata_stamp(seed.get("shutdown_dates_updated_at"))
+                  or _shutdown_metadata_stamp(seed.get("generated_at")))
+    stamps = {name: {model: seed_stamp for model in dates}
+              for name, dates in merged.items()}
+    scopes = cached.get("scopes") or {}
+    cached_stamps = cached.get("shutdown_date_stamps") or {}
+    if not isinstance(scopes, dict):
+        return merged, stamps
+    if not isinstance(cached_stamps, dict):
+        cached_stamps = {}
+    for name, dates in _shutdown_dates(cached).items():
+        if scopes.get(name) != _scope(name, cfg):
+            continue
+        known = merged.setdefault(name, {})
+        known_stamps = stamps.setdefault(name, {})
+        own_stamps = cached_stamps.get(name) or {}
+        if not isinstance(own_stamps, dict):
+            own_stamps = {}
+        for model, shutdown in dates.items():
+            observed = _shutdown_metadata_stamp(own_stamps.get(model))
+            if model not in known or observed >= known_stamps.get(model, 0.0):
+                known[model] = shutdown
+                known_stamps[model] = observed
+    return merged, stamps
+
+
+def _active_models(providers, shutdown_dates):
+    today = datetime.now(timezone.utc).date().isoformat()
+    return {provider: [model for model in models
+                       if isinstance(model, str) and model
+                       and (not shutdown_dates.get(provider, {}).get(model)
+                            or shutdown_dates[provider][model] > today)]
+            for provider, models in providers.items() if isinstance(models, list)}
+
+
 def _load_seed() -> Dict[str, List[str]]:
     payload = _load_json_file(SEED_PATH) or {}
-    return payload.get("providers", {})
+    return _active_models(payload.get("providers", {}), _shutdown_dates(payload))
 
 
 NEVER_FETCHED = 0.0
@@ -309,10 +380,19 @@ def _cache_stamps(cfg: Optional[RobinConfig] = None) -> Dict[str, float]:
             and scopes.get(name) == _scope(name, cfg)}
 
 
+def _cache_shutdown_dates(cfg: RobinConfig) -> dict:
+    payload = _load_json_file(_cache_path(cfg)) or {}
+    scopes = payload.get("scopes") or {}
+    if not isinstance(scopes, dict):
+        return {}
+    return {name: dates for name, dates in _shutdown_dates(payload).items()
+            if scopes.get(name) == _scope(name, cfg)}
+
+
 def _load_cache(ignore_ttl: bool = False,
                 cfg: Optional[RobinConfig] = None) -> Optional[Dict[str, List[str]]]:
     """The last fetched lists that belong to `cfg`. `ignore_ttl` returns them
-    however old they are."""
+    however old they are, still excluding models past their shutdown date."""
     cfg = cfg if cfg is not None else RobinConfig.from_env()
     payload = _load_json_file(_cache_path(cfg))
     if not payload:
@@ -339,16 +419,20 @@ def _load_cache(ignore_ttl: bool = False,
         return isinstance(own, (int, float)) and not isinstance(own, bool) \
             and now - own <= CACHE_TTL_SECONDS
 
-    return {
+    own_lists = {
         name: models for name, models in providers.items()
         if isinstance(scopes.get(name), str) and scopes[name] == _scope(name, cfg)
         and (ignore_ttl or fresh(name))
     }
+    shutdown_dates, _ = _merge_shutdown_dates(_load_json_file(SEED_PATH) or {}, payload, cfg)
+    return _active_models(own_lists, shutdown_dates)
 
 
 def _write_cache(providers: Dict[str, List[str]], fetched_at: float,
                  cfg: Optional[RobinConfig] = None,
-                 stamps: Optional[Dict[str, float]] = None) -> None:
+                 stamps: Optional[Dict[str, float]] = None,
+                 shutdown_dates: Optional[dict] = None,
+                 shutdown_date_stamps: Optional[dict] = None) -> None:
     """Write the lists, scoped to `cfg`, with an explicit stamp."""
     cfg = cfg if cfg is not None else RobinConfig.from_env()
     path = _cache_path(cfg)
@@ -357,6 +441,8 @@ def _write_cache(providers: Dict[str, List[str]], fetched_at: float,
         "providers": providers,
         "scopes": {name: _scope(name, cfg) for name in providers},
         "stamps": {name: float(ts) for name, ts in (stamps or {}).items()},
+        "shutdown_dates": shutdown_dates or {},
+        "shutdown_date_stamps": shutdown_date_stamps or {},
     }
     tmp_name = None
     try:
@@ -390,6 +476,8 @@ def refresh(cfg: Optional[RobinConfig] = None,
     # Seed first, then whatever we last fetched on top of it, expired or not.
     # A provider that failed to refresh keeps its last known list.
     merged = dict(_load_seed())
+    shutdown_dates, shutdown_date_stamps = _merge_shutdown_dates(
+        _load_json_file(SEED_PATH) or {}, _load_json_file(_cache_path(cfg)) or {}, cfg)
     own_lists = _load_cache(ignore_ttl=True, cfg=cfg) or {}
     merged.update(own_lists)
     # The previous stamp is ours to keep only if the file held our lists: a
@@ -398,9 +486,25 @@ def refresh(cfg: Optional[RobinConfig] = None,
     fetched_ok = set()
     for name in configured_providers(cfg):
         try:
-            models = PROVIDERS[name]["fetch"](cfg)
+            catalogue = PROVIDERS[name]["fetch"](cfg)
+            models, dates = [], dict(shutdown_dates.get(name, {}))
+            date_stamps = dict(shutdown_date_stamps.get(name, {}))
+            for item in catalogue:
+                model = item.get("id") if isinstance(item, dict) else item
+                if isinstance(model, str) and model:
+                    models.append(model)
+                    shutdown = _shutdown_date(item.get("shutdown_date")) if isinstance(item, dict) else None
+                    if shutdown:
+                        dates[model] = shutdown
+                        date_stamps[model] = time.time()
+                    elif isinstance(item, dict) and "shutdown_date" in item \
+                            and item["shutdown_date"] is None and model in dates:
+                        dates[model] = None
+                        date_stamps[model] = time.time()
             if models:
                 merged[name] = models
+                shutdown_dates[name] = dates
+                shutdown_date_stamps[name] = date_stamps
                 fetched_ok.add(name)
                 if verbose:
                     _report("  {:<12} {} models".format(name, len(models)))
@@ -424,7 +528,9 @@ def refresh(cfg: Optional[RobinConfig] = None,
         stamp = NEVER_FETCHED
     stamps = dict(_cache_stamps(cfg) if own_lists else {})
     stamps.update({name: time.time() for name in fetched_ok})
-    _write_cache(merged, stamp, cfg, stamps=stamps)
+    merged = _active_models(merged, shutdown_dates)
+    _write_cache(merged, stamp, cfg, stamps=stamps, shutdown_dates=shutdown_dates,
+                 shutdown_date_stamps=shutdown_date_stamps)
     return merged
 
 
@@ -440,9 +546,13 @@ def get_registry(cfg: Optional[RobinConfig] = None,
         # or only the bundled seed's. Refresh then, so a newly added API key
         # takes effect at once rather than when the TTL expires.
         missing = [p for p in configured_providers(cfg) if p not in cached]
+        # Older OpenAI caches hold IDs alone; refresh once to learn shutdown dates.
+        if "openai" in configured_providers(cfg) and "openai" not in _cache_shutdown_dates(cfg):
+            if "openai" not in missing:
+                missing.append("openai")
         if not missing:
             return cached
-        logger.info("Refreshing: %s configured since the cache was written.",
+        logger.info("Refreshing missing catalogue data for: %s.",
                     ", ".join(missing))
     return refresh(cfg)
 

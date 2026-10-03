@@ -190,8 +190,7 @@ class TheConfiguredKeyReachesTheClient(unittest.TestCase):
     def client_key(self, provider, cfg):
         model, field = PROVIDER_MODELS[provider]
         spec = llm_utils._provider_constructor(provider, model, cfg)
-        if spec is None:
-            self.skipTest("%s client is not installed" % provider)
+        self.assertIsNotNone(spec)
         # Through get_llm, so the credential check runs as it does for a user.
         with mock.patch.object(llm, "resolve_model_config", return_value=spec):
             value = getattr(llm.get_llm(model, cfg), field)

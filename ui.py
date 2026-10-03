@@ -29,32 +29,40 @@ from health import check_llm_health, check_search_engines, check_tor_proxy
 def _render_pipeline_error(stage: str, err: Exception) -> None:
     message = str(err).strip() or err.__class__.__name__
     lower_msg = message.lower()
-    hints = [
-        "- Confirm the relevant API key is set in your `.env` or shell before launching Streamlit.",
-        "- Keys copied from dashboards often include hidden spaces; re-copy if authentication keeps failing.",
-        "- Restart the app after updating environment variables so the new values are picked up.",
-    ]
+    status = getattr(err, "status_code", None)
+    hints = []
 
-    if any(token in lower_msg for token in ("rate limit", "rate_limit", "429", "quota",
-                                            "resource has been exhausted", "too many requests")):
-        hints.insert(0, "- The model provider is rate-limiting this key. Wait a minute and "
-                        "run it again, lower **Max Results to Filter**, or pick another model.")
-    elif any(token in lower_msg for token in ("anthropic", "x-api-key", "invalid api key", "authentication")):
-        hints.insert(0, "- Claude/Anthropic models require a valid `ANTHROPIC_API_KEY`.")
-    elif "openrouter" in lower_msg or "user not found" in lower_msg or "code: 401" in lower_msg:
-        hints.insert(0, "- OpenRouter 401/User not found usually means the API key is invalid/expired or has leading/trailing characters.")
-        hints.insert(1, "- Set `OPENROUTER_API_KEY` without extra spaces and verify the key is active in your OpenRouter account.")
-        hints.insert(2, "- Keep `OPENROUTER_BASE_URL` as `https://openrouter.ai/api/v1` unless you intentionally use a custom gateway.")
-    elif "openai" in lower_msg or "gpt" in lower_msg:
-        hints.insert(0, "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.")
-    elif any(t in lower_msg for t in ("context length", "context_length", "too many tokens",
-                                      "maximum context", "reduce the length")):
-        hints.insert(0, "- The investigation exceeded the model's context window. "
-                        "Lower **Content per Page** or **Max Pages to Scrape** in the sidebar, "
-                        "or pick a model with a larger window.")
-        hints.insert(1, "- On Ollama, raise `OLLAMA_NUM_CTX` (see TROUBLESHOOTING.md).")
-    elif "google" in lower_msg or "gemini" in lower_msg:
-        hints.insert(0, "- Google Gemini models need `GOOGLE_API_KEY` or Application Default Credentials.")
+    if any(t in lower_msg for t in ("context length", "context_length", "too many tokens",
+                                    "maximum context", "reduce the length", "token limit")):
+        hints = ["- The investigation exceeded the model's context window. Lower "
+                 "**Content per Page** or **Max Pages to Scrape**, or pick a model with a larger window.",
+                 "- On Ollama, raise `OLLAMA_NUM_CTX` (see TROUBLESHOOTING.md)."]
+    elif any(t in lower_msg for t in ("temperature", "top_p", "top_k", "reasoning_effort",
+                                      "thinking_budget", "unsupported parameter", "unknown parameter",
+                                      "unexpected keyword", "not supported", "deprecated parameter")):
+        hints = ["- The selected model rejected a request setting. Update Robin and its "
+                 "provider dependencies, or choose another model.",
+                 "- Current models can require their default sampling settings; changing the API key will not fix this error."]
+    elif status in (402, 429) or any(t in lower_msg for t in ("rate limit", "rate_limit", "429", "quota",
+            "resource has been exhausted", "resource_exhausted", "credits are depleted", "too many requests")):
+        hints = ["- The provider's rate limit or quota was reached. Check your billing and quota; "
+                 "for temporary rate limits, wait and retry, or pick another model."]
+    elif status in (401, 403) or any(t in lower_msg for t in ("invalid api key", "invalid_api_key",
+            "authentication", "unauthorized", "permission denied", "api_key` is not set", "user not found")):
+        hints = ["- Confirm the selected provider's API key is set in your `.env` or shell, "
+                 "is valid, and has access to this model.",
+                 "- Remove any spaces around the key and restart Robin after updating it."]
+    elif "retired" in lower_msg or ((status == 404 or "model_not_found" in lower_msg)
+                                    and any(t in lower_msg for t in ("deprecated", "shut down", "shutdown"))):
+        hints = ["- The provider has retired this model. Select an active model from the sidebar.",
+                 "- Restarting or refreshing cannot restore a retired model. Update Robin if it still appears in the picker."]
+    elif any(t in lower_msg for t in ("model_not_found", "model not found", "does not exist")):
+        hints = ["- Refresh the model list or restart Robin, then select a model your provider currently serves."]
+    elif status == 400:
+        hints = ["- The provider rejected the request. Check the error above for the setting "
+                 "or input it rejected; update Robin and its provider dependencies if needed."]
+    else:
+        hints = ["- Check the provider error above. Retry or choose another model if the provider is unavailable."]
 
     st.error(
         "❌ Failed to {}.\n\nError: {}\n\n{}".format(
@@ -169,10 +177,8 @@ if not model_options:
     if _configured:
         st.error(
             "⛔ **Could not load models for: {}.**\n\n"
-            "The key is set, so this is usually the provider being unreachable: "
-            "no network, an outage, or an expired key. Robin falls back to a "
-            "bundled model list, but it does not carry every provider.\n\n"
-            "Retry once you have a connection, or add a second provider's key. "
+            "Check the provider's availability and model access for this key, "
+            "then refresh the model list. "
             "See TROUBLESHOOTING.md.".format(", ".join(_configured))
         )
     elif Path(__file__).with_name(".env").is_dir():
@@ -258,6 +264,7 @@ _providers = [
     ("OpenAI",      _robin_cfg.openai_api_key,     True),
     ("Anthropic",   _robin_cfg.anthropic_api_key,  True),
     ("Google",      _robin_cfg.google_api_key,     True),
+    ("Mistral",     _robin_cfg.mistral_api_key,    True),
     ("OpenRouter",  _robin_cfg.openrouter_api_key, True),
     ("Ollama",      _robin_cfg.ollama_base_url,    False),
     ("llama.cpp",   _robin_cfg.llama_cpp_base_url, False),

@@ -1,6 +1,43 @@
 {
-  "_comment": "Bundled seed for model_registry.py. Refreshed live at runtime; this is the offline fallback. Regenerate with tools/refresh_seed.py.",
+  "_comment": "Bundled offline fallback for model_registry.py. Live catalogues replace it at runtime; shutdown_dates also exclude retired models during outages.",
   "generated_at": "2026-09-10",
+  "shutdown_dates_updated_at": "2026-10-02T00:05:11Z",
+  "shutdown_dates": {
+    "openai": {
+      "gpt-3.5-turbo": "2026-10-23",
+      "gpt-3.5-turbo-0125": "2026-10-23",
+      "gpt-3.5-turbo-1106": "2026-09-28",
+      "gpt-4": "2026-10-23",
+      "gpt-4-0613": "2026-10-23",
+      "gpt-4-turbo": "2026-10-23",
+      "gpt-4-turbo-2024-04-09": "2026-10-23",
+      "gpt-4.1-nano": "2026-10-23",
+      "gpt-4.1-nano-2025-04-14": "2026-10-23",
+      "gpt-4o-2024-05-13": "2026-10-23",
+      "gpt-5-2025-08-07": "2026-12-11",
+      "gpt-5-chat-latest": "2026-07-23",
+      "gpt-5-codex": "2026-07-23",
+      "gpt-5-mini-2025-08-07": "2026-12-11",
+      "gpt-5-nano-2025-08-07": "2026-12-11",
+      "gpt-5-pro-2025-10-06": "2026-12-11",
+      "gpt-5.1-chat-latest": "2026-07-23",
+      "gpt-5.1-codex": "2026-07-23",
+      "gpt-5.1-codex-max": "2026-07-23",
+      "gpt-5.1-codex-mini": "2026-07-23",
+      "gpt-5.2-chat-latest": "2026-08-10",
+      "gpt-5.2-codex": "2026-07-23",
+      "gpt-5.3-chat-latest": "2026-08-10",
+      "o1": "2026-10-23",
+      "o1-2024-12-17": "2026-10-23",
+      "o1-pro": "2026-10-23",
+      "o1-pro-2025-03-19": "2026-10-23",
+      "o3-2025-04-16": "2026-12-11",
+      "o3-mini": "2026-10-23",
+      "o3-mini-2025-01-31": "2026-10-23",
+      "o4-mini": "2026-10-23",
+      "o4-mini-2025-04-16": "2026-10-23"
+    }
+  },
   "providers": {
     "anthropic": [
       "claude-fable-5-1",
@@ -37,6 +74,11 @@
       "gemini-flash-lite-latest",
       "gemini-omni-flash-preview",
       "gemini-pro-latest"
+    ],
+    "mistral": [
+      "mistral-small-2603",
+      "mistral-medium-3-5",
+      "mistral-large-2512"
     ],
     "openai": [
       "gpt-6-astra",

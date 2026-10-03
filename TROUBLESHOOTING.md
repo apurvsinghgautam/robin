@@ -1,9 +1,7 @@
 # Troubleshooting
 
-Most Robin problems fall into one of four buckets: Tor isn't ready, the LLM
-provider isn't configured the way Robin expects, the model list is stale, or the
-dark web genuinely had nothing to say about your query. Work through the section
-that matches what you're seeing.
+Check the section that matches your error: provider configuration, local model
+connectivity, model availability, Docker, or Tor and search availability.
 
 If none of this helps, open an issue and include the Robin version, whether you
 use the web UI or the MCP server, the provider you selected, and the console
@@ -13,32 +11,41 @@ output.
 
 ## The model dropdown is empty, or only shows one provider
 
-Robin only lists models for providers whose API key it can actually see. An
-empty dropdown means it found no keys at all.
+Robin lists hosted models for providers with a configured API key and local
+models from reachable servers. An empty dropdown can mean no provider is
+configured, or that a configured provider could not be reached.
 
-- Confirm your `.env` sits next to where you launched Robin, and that Docker is
+- Confirm your `.env` is in Robin's project directory, and that Docker is
   mounting it: `-v "$(pwd)/.env:/app/.env"`.
-- You only need the key for the provider you intend to use. A `.env` containing
-  nothing but `ANTHROPIC_API_KEY` is fine, and Robin will show Claude models
-  only. There is no requirement to set `OPENAI_API_KEY` if you aren't using it.
+- Set the key for the hosted provider you intend to use. Local models also
+  appear when their servers are reachable.
 - Supported keys are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`,
-  `MISTRAL_API_KEY` and `OPENROUTER_API_KEY`. Local servers (Ollama, llama.cpp,
-  any OpenAI-compatible endpoint) need no key at all.
-- Only API keys belong in `.env`. Everything else, Ollama's URL included, has a
-  working default in `config.py`; add a line only to override one.
-- Leftover `your_...` placeholders from an older sample file are harmless. Robin
-  treats them as unset and falls back to the default.
+  `MISTRAL_API_KEY` and `OPENROUTER_API_KEY`. Ollama and llama.cpp need no key;
+  a custom OpenAI-compatible endpoint may require `CUSTOM_API_KEY`.
+- Configuration defaults are in `config.py`. Add values such as
+  `OLLAMA_BASE_URL` to `.env` when your setup needs an override.
 - Keys are read at startup. Restart Robin after editing `.env`.
 
 ## Ollama models don't appear
 
-This is almost always the container being unable to reach Ollama on the host.
+Check the address from the same environment where Robin runs:
+
+- **Robin and Ollama on the same machine:** set
+  `OLLAMA_BASE_URL=http://127.0.0.1:11434` in `.env`.
+- **Robin in WSL, Ollama on Windows:** WSL's default NAT mode does not share
+  Windows localhost. Use the Windows host address with a reachable Ollama
+  listener, or configure WSL mirrored networking to use Windows localhost.
+- **Robin in Docker:** use the steps below.
+
+Run `curl <OLLAMA_BASE_URL>/api/tags` from Robin's environment. A request that
+works only on the Ollama host does not prove Robin can reach it. Restart Robin
+after changing the URL.
 
 1. In `.env`, set `OLLAMA_BASE_URL=http://host.docker.internal:11434`.
 2. Run the container with `--add-host=host.docker.internal:host-gateway`.
 3. Serve Ollama on all interfaces, not just loopback. Ollama binds to
-   `127.0.0.1` by default, which a container cannot reach no matter what
-   `OLLAMA_BASE_URL` says.
+   `127.0.0.1` by default, which a container on a separate network cannot reach
+   through `host.docker.internal`.
 
    If you started Ollama yourself:
    ```bash
@@ -59,30 +66,28 @@ This is almost always the container being unable to reach Ollama on the host.
    On macOS, quit the Ollama app first, then run the `ollama serve` command
    above in a terminal.
 
-   Confirm it worked: `curl http://localhost:11434/api/tags` should answer, and
-   `ss -lntp | grep 11434` should show `0.0.0.0:11434` rather than
-   `127.0.0.1:11434`.
+   On Linux, `ss -lntp | grep 11434` should show `0.0.0.0:11434` rather than
+   `127.0.0.1:11434`. Check `/api/tags` from inside the Robin container too.
 4. Confirm you have actually pulled a model: `ollama list`. Robin lists what
    Ollama reports, so an empty Ollama means an empty section in the picker.
 
 ## "Model not found", "this model is out of date", or a failing connection check
 
-Providers retire models, so Robin keeps no hardcoded model list: it asks each
-provider what it currently serves and caches the answer.
+Providers retire models or restrict access by account. Robin fetches provider
+catalogues, caches them, and uses a bundled list when a provider is unreachable.
+An offline list can include a model your account no longer has access to.
 
-- Restart Robin to force a refresh. The container refreshes on start.
-- Delete the cache to force a rebuild: remove `~/.robin/models_cache.json`, or
-  whatever `ROBIN_CACHE_DIR` points at. A damaged cache repairs itself on the
-  next launch, so this is rarely necessary.
+- Restart the Docker container to refresh its model list. For a native Python
+  installation, run `python model_registry.py`, then reload Robin.
+- If needed, remove `models_cache.json` from `~/.robin` or your
+  `ROBIN_CACHE_DIR`, then restart Robin.
 - Set `MODEL_REGISTRY_TTL_HOURS` to control how long a fetched list is reused.
   The default is 24.
-- If a provider is unreachable, Robin keeps the last list it had rather than
-  emptying the picker, so a stale entry can survive an outage. A restart with
-  the network back will clear it.
-- The bundled offline list covers OpenAI, Anthropic, Google and OpenRouter.
-  Mistral has no bundled entry yet, so a Mistral-only setup needs one
-  successful online run before its models appear. Robin will name the provider
-  it could not reach rather than claiming nothing is configured.
+- If a provider is unreachable, Robin keeps its last available list. Retry a
+  refresh once the provider is reachable again.
+- If the provider explicitly says a model was retired or shut down, select an
+  active model. Refreshing cannot restore it. Update Robin if a retired model
+  still appears in the picker.
 
 ## Local model answers ignore the end of the investigation
 
@@ -94,7 +99,9 @@ sets it explicitly, defaulting to 32768.
 - Keep it above the budget you asked for. The sidebar caption under **Content
   per Page** shows the estimated tokens per investigation; the window needs to
   hold that plus the prompt and the answer.
-- Reducing **Content per Page** or **Max Pages to Scrape** is the other lever.
+- Reduce **Content per Page** or **Max Pages to Scrape** if the combined input
+  exceeds the model's window. For hosted models, use these controls or select a
+  model with a larger window when you receive a context-limit error.
 
 ## Docker container won't start, or the port is taken
 
@@ -188,23 +195,21 @@ If reports are thin but the sources look right, raise Content per Page first.
 If the investigation is expensive, lower Max Pages to Scrape first, since it
 multiplies the per-page budget.
 
-## Why does an engine appear in my results?
-
-It shouldn't. Robin drops any result pointing at one of the 16 search engines it
-queries, ignores an engine's own navigation links, and unwraps engine redirect
-links to the real target underneath. If you still see one, please open an issue
-with the query and the engine.
-
 ## 401 / "User not found" / authentication errors
 
-- Regenerate the key. This is by far the most common cause, especially on
-  OpenRouter, where the message reads `401 - User not found`.
-- Don't wrap values in quotes in `.env`. Write `OPENAI_API_KEY=sk-...`, not
-  `OPENAI_API_KEY="sk-..."`. Robin strips matched quotes defensively, but
-  unmatched ones will break.
-- Watch for trailing spaces and line breaks introduced by copy-paste from a
-  provider dashboard.
+- Check that the selected provider's key is valid and belongs to the intended
+  account. Regenerate it if the provider reports that it is invalid or revoked.
+- Confirm the complete key was copied from the provider dashboard.
 - Confirm the key's account actually has access to the model you selected.
+- Restart Robin after updating `.env` so it reads the new key.
+
+## Rate limits, depleted credits, or quota errors
+
+- Check the provider's billing balance and API usage limits. A chat subscription
+  does not necessarily include API credits.
+- For temporary rate limits, wait and retry, or select another model or provider.
+- If you just added credits, allow the provider time to apply them before
+  retrying. Keep the original error text if requests still fail.
 
 ## Tor problems
 
@@ -261,9 +266,6 @@ MCP server returns the same four as a `status`:
   server the reply carries the kept links, so your agent can retry them with
   `robin_scrape`.
 
-Non-English titles (Cyrillic, CJK, Arabic) are kept, so a query in another
-language is fine.
-
 ## The agent says the MCP server produced invalid output
 
 In stdio mode the container's stdout *is* the wire: it carries nothing but
@@ -283,46 +285,24 @@ the entrypoint's startup messages go to stderr instead, so:
   nothing to read, and the host reports a broken server rather than a missing
   flag.
 
-## Robin says it has no model of its own
+## MCP refinement or filtering runs on the host instead of Robin
 
-Three replies say this, and none of them is an error. Robin runs a model only
-when your client offers MCP sampling or you configured one; most hosts do
-neither, and the tools-and-prompts workflow is designed for exactly that.
+`refine_it_yourself` and `unfiltered` return the step to the host's model.
+Follow the returned instructions, or configure a provider key and `ROBIN_MODEL`
+for Robin to run those steps.
 
-- **`status: refine_it_yourself`** from `robin_refine`. Robin hands back the
-  refiner's own rules and you write the query. Your host is a model, so this
-  costs nothing.
-- **`status: unfiltered`** from `robin_filter`. Robin judged nothing, so it
-  dropped nothing: every result comes back and every one is scrapeable. The
-  reply carries the filter's own rules and tells the host to run that pass
-  before scraping, so the step still happens, on the host's model instead of
-  Robin's.
-- **`status: needs_domain`** from `robin_search`. Not about models at all: the
-  research domain is the user's to choose, so nothing is searched until they
-  have. Ask them, then pass `preset` with `user_chose=true`.
+## The MCP host cannot connect, or tools do not run
 
-To have Robin judge relevance itself, give the container a provider key in its
-environment (and `ROBIN_MODEL` to pick the model), or use a client that
-supports sampling. With one, `robin_filter` returns only the results it
-judges on topic, most relevant first.
+Robin's MCP server uses stdio. Configure it in a host that can launch local
+processes, such as Codex or Claude Code. A remote connector cannot launch the
+Docker command on your machine.
 
-## ChatGPT cannot connect, or the tools never appear in a chat
-
-ChatGPT has two MCP surfaces and they are not interchangeable.
-
-**Settings → MCP servers** (desktop app) configures the Codex host, shared with
-the Codex CLI and the IDE extension. Robin starts fine there — you will see its
-Tor lines — but its tools appear in Codex sessions, not in an ordinary chat.
-Raise `tool_timeout_sec` in `~/.codex/config.toml`: a Tor search outlasts the
-default.
-
-**Connectors** (*Settings → Apps & Connectors*) are what an ordinary chat uses.
-They run in OpenAI's infrastructure and cannot start or reach a server on your
-machine, so Robin cannot be one. Use the Codex surface above instead.
-
-If tools are listed but a call never runs, check the client's approval policy.
-A policy set never to ask also never approves, so the call is declined before
-it reaches Robin.
+- Start the configured command in a terminal and check stderr for startup errors.
+- Keep `-i` in the Docker command so the host can send requests through stdin.
+- Increase the host's tool timeout if it cancels long Tor searches or scrapes.
+  In Codex, set `tool_timeout_sec` for Robin in `~/.codex/config.toml`.
+- If tools are listed but a call never reaches Robin, check the host's approval
+  policy and any pending tool approval.
 
 ## Tools report tor_bootstrapping
 
