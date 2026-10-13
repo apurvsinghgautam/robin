@@ -81,6 +81,9 @@ def _ensure_credentials(model_choice: str, llm_class, model_params: dict,
         base_url = (model_params or {}).get("base_url", "").lower()
         if "openrouter" in base_url:
             _require(cfg.openrouter_api_key, "OPENROUTER_API_KEY", "OpenRouter")
+        elif "cheaperinference" in base_url:
+            _require(cfg.cheaperinference_api_key, "CHEAPER_INFERENCE_API_KEY",
+                     "Cheaper Inference")
         elif base_url and ("localhost" in base_url or "127.0.0.1" in base_url):
             pass  # A local model needs no API key.
         elif cfg.llama_cpp_base_url and base_url.rstrip("/") in (

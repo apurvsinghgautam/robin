@@ -61,6 +61,8 @@ def check_llm_health(model_choice, cfg: Optional[RobinConfig] = None):
         base_url = (ctor.get("base_url") or "").lower()
         if "openrouter" in base_url:
             provider = "OpenRouter"
+        elif "cheaperinference" in base_url:
+            provider = "Cheaper Inference"
         elif "llama" in base_url or "localhost" in base_url or "127.0.0.1" in base_url:
             provider = "llama.cpp (local)"
         else:

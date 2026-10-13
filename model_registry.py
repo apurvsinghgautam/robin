@@ -41,6 +41,7 @@ OPENAI_API = "https://api.openai.com/v1"
 ANTHROPIC_API = "https://api.anthropic.com/v1"
 GOOGLE_API = "https://generativelanguage.googleapis.com/v1beta"
 MISTRAL_API = "https://api.mistral.ai/v1"
+CHEAPER_INFERENCE_API = "https://api.cheaperinference.com/v1"
 
 try:
     CACHE_TTL_SECONDS = int(float(os.getenv("MODEL_REGISTRY_TTL_HOURS", "24")) * 3600)
@@ -215,12 +216,29 @@ def _fetch_openrouter(cfg: RobinConfig) -> List[str]:
     return sorted(out, key=_version_sort_key)
 
 
+def _fetch_cheaperinference(cfg: RobinConfig) -> List[str]:
+    """Cheaper Inference gives each model a type; only "text" models chat."""
+    data = _get_json(
+        CHEAPER_INFERENCE_API + "/models",
+        {"Authorization": "Bearer {}".format(cfg.cheaperinference_api_key)},
+    )
+    out = []
+    for m in data.get("data", []):
+        if m.get("type", "text") != "text":
+            continue
+        if m.get("id") and not _looks_non_chat(m["id"]):
+            out.append(m["id"])
+    return sorted(out, key=_version_sort_key)
+
+
 PROVIDERS = {
     "openai": {"fetch": _fetch_openai, "key": lambda cfg: cfg.openai_api_key},
     "anthropic": {"fetch": _fetch_anthropic, "key": lambda cfg: cfg.anthropic_api_key},
     "google": {"fetch": _fetch_google, "key": lambda cfg: cfg.google_api_key},
     "mistral": {"fetch": _fetch_mistral, "key": lambda cfg: cfg.mistral_api_key},
     "openrouter": {"fetch": _fetch_openrouter, "key": lambda cfg: cfg.openrouter_api_key},
+    "cheaperinference": {"fetch": _fetch_cheaperinference,
+                         "key": lambda cfg: cfg.cheaperinference_api_key},
 }
 
 
@@ -231,6 +249,7 @@ ENDPOINTS = {
     "google": lambda cfg: GOOGLE_API,
     "mistral": lambda cfg: MISTRAL_API,
     "openrouter": _openrouter_base,
+    "cheaperinference": lambda cfg: CHEAPER_INFERENCE_API,
 }
 
 
@@ -587,6 +606,15 @@ def get_entries(cfg: Optional[RobinConfig] = None,
             entries.append({
                 "key": "{}-openrouter".format(model_name.split("/", 1)[-1]),
                 "provider": "openrouter",
+                "model_name": model_name,
+            })
+
+    if "cheaperinference" in available:
+        for model_name in registry.get("cheaperinference", []):
+            # Model ids are bare, so a suffix keeps them apart from first-party keys.
+            entries.append({
+                "key": "{}-cheaperinference".format(model_name),
+                "provider": "cheaperinference",
                 "model_name": model_name,
             })
 

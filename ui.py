@@ -266,6 +266,7 @@ _providers = [
     ("Google",      _robin_cfg.google_api_key,     True),
     ("Mistral",     _robin_cfg.mistral_api_key,    True),
     ("OpenRouter",  _robin_cfg.openrouter_api_key, True),
+    ("Cheaper Inference", _robin_cfg.cheaperinference_api_key, True),
     ("Ollama",      _robin_cfg.ollama_base_url,    False),
     ("llama.cpp",   _robin_cfg.llama_cpp_base_url, False),
 ]
