@@ -55,6 +55,7 @@ class FromEnv(unittest.TestCase):
         defaults = {
             "openai_api_key": None, "google_api_key": None, "anthropic_api_key": None,
             "openrouter_api_key": None, "mistral_api_key": None, "custom_api_key": None,
+            "cheaperinference_api_key": None,
             "ollama_base_url": "http://host.docker.internal:11434",
             "openrouter_base_url": "https://openrouter.ai/api/v1", "ollama_num_ctx": 32768,
             "llama_cpp_base_url": None, "custom_api_base_url": None, "custom_api_model": None,
@@ -75,6 +76,7 @@ class FromEnv(unittest.TestCase):
             "OPENROUTER_BASE_URL": ("openrouter_base_url", "https://gateway.example/api/v1"),
             "OPENROUTER_API_KEY": ("openrouter_api_key", "or-key"),
             "MISTRAL_API_KEY": ("mistral_api_key", "mistral"),
+            "CHEAPER_INFERENCE_API_KEY": ("cheaperinference_api_key", "ci-key"),
             "OLLAMA_NUM_CTX": ("ollama_num_ctx", 16384),
             "LLAMA_CPP_BASE_URL": ("llama_cpp_base_url", "http://127.0.0.1:8080"),
             "CUSTOM_API_BASE_URL": ("custom_api_base_url", "https://api.groq.com/openai/v1"),
@@ -176,6 +178,7 @@ PROVIDER_MODELS = {  # provider: (a model id, the client field that holds the ke
     "google": ("gemini-2.0-flash", "google_api_key"),
     "mistral": ("mistral-small-latest", "mistral_api_key"),
     "openrouter": ("openai/gpt-4o-mini", "openai_api_key"),
+    "cheaperinference": ("gpt-5.4-mini", "openai_api_key"),
 }
 
 
@@ -228,6 +231,7 @@ class SecretsStayOutOfErrors(unittest.TestCase):
         "GOOGLE_API_KEY": "fake-google-" + "NOTREAL" * 5,
         "MISTRAL_API_KEY": "mistral-dddddddddddd",
         "OPENROUTER_API_KEY": "fake-openrouter-eeeeee",
+        "CHEAPER_INFERENCE_API_KEY": "fake-cheaperinference-gggg",
         "CUSTOM_API_KEY": "custom-ffffffffffff",
     }
 

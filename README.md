@@ -20,7 +20,7 @@
 
 ## Features
 
-- 🤖 **Multi-Model Support** – OpenAI, Claude, Gemini, Mistral, OpenRouter, Ollama, or any OpenAI-compatible API (LM Studio, llama.cpp, Groq, etc.).
+- 🤖 **Multi-Model Support** – OpenAI, Claude, Gemini, Mistral, OpenRouter, Cheaper Inference, Ollama, or any OpenAI-compatible API (LM Studio, llama.cpp, Groq, etc.).
 - 🌐 **Web UI** – Streamlit-based interface for interactive investigations.
 - 🔌 **MCP Support** – Run Robin from any MCP-capable agent, using that agent's own model. See [Robin as MCP](#robin-as-mcp).
 - 💬 **Conversational Follow-ups** – Ask grounded follow-up questions about an investigation without re-running the search, answered from that investigation's own data.
@@ -41,7 +41,7 @@
 > The tool needs Tor to do the searches. You can install Tor using `apt install tor` on Linux/Windows(WSL) or `brew install tor` on Mac. Once installed, confirm if Tor is running in the background.
 
 > [!TIP]
-> Provide your API key either in a `.env` file (copy [`.env.example`](.env.example)) or as environment variables. One key is enough: Robin lists models for whichever providers it finds. Supported keys are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY` and `OPENROUTER_API_KEY`.
+> Provide your API key either in a `.env` file (copy [`.env.example`](.env.example)) or as environment variables. One key is enough: Robin lists models for whichever providers it finds. Supported keys are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `MISTRAL_API_KEY`, `OPENROUTER_API_KEY` and `CHEAPER_INFERENCE_API_KEY`.
 >
 > For Ollama, nothing goes in your `.env`. Robin defaults to `http://host.docker.internal:11434`, which is what the recommended Docker install needs. Two things are still on you:
 >

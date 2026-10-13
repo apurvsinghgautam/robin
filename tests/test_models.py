@@ -96,6 +96,34 @@ class MistralCatalogue(RegistryTestCase):
                                       {"Authorization": "Bearer test-mistral"})
 
 
+class CheaperInferenceCatalogue(RegistryTestCase):
+    def test_live_discovery_uses_the_configured_key_and_keeps_text_models(self):
+        cfg = RobinConfig(cheaperinference_api_key="test-ci", ollama_base_url=None)
+        catalogue = {"data": [
+            {"id": "gpt-5.4-mini", "type": "text"},
+            {"id": "gpt-image-2", "type": "image"},
+            {"id": "seedance-2.0", "type": "video"},
+        ]}
+        with mock.patch.object(model_registry, "_get_json", return_value=catalogue) as fetch:
+            self.assertEqual(model_registry._fetch_cheaperinference(cfg), ["gpt-5.4-mini"])
+        fetch.assert_called_once_with(model_registry.CHEAPER_INFERENCE_API + "/models",
+                                      {"Authorization": "Bearer test-ci"})
+
+    def test_a_suffixed_key_resolves_to_the_gateway_client(self):
+        cfg = RobinConfig(openai_api_key="sk-test", cheaperinference_api_key="test-ci",
+                          ollama_base_url=None)
+        with self.providers(openai=serves("gpt-5.4-mini"),
+                            cheaperinference=serves("gpt-5.4-mini")):
+            entries = model_registry.get_entries(cfg)
+        self.assertEqual([e["key"] for e in entries],
+                         ["gpt-5.4-mini", "gpt-5.4-mini-cheaperinference"])
+        with mock.patch.object(llm_utils, "_registry_entries", return_value=entries):
+            params = llm_utils.resolve_model_config(
+                "gpt-5.4-mini-cheaperinference", cfg)["constructor_params"]
+        self.assertEqual((params["model_name"], params["base_url"], params["api_key"]),
+                         ("gpt-5.4-mini", model_registry.CHEAPER_INFERENCE_API, "test-ci"))
+
+
 class ModelShutdownDates(RegistryTestCase):
     def setUp(self):
         super().setUp()

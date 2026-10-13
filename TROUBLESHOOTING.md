@@ -20,8 +20,9 @@ configured, or that a configured provider could not be reached.
 - Set the key for the hosted provider you intend to use. Local models also
   appear when their servers are reachable.
 - Supported keys are `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`,
-  `MISTRAL_API_KEY` and `OPENROUTER_API_KEY`. Ollama and llama.cpp need no key;
-  a custom OpenAI-compatible endpoint may require `CUSTOM_API_KEY`.
+  `MISTRAL_API_KEY`, `OPENROUTER_API_KEY` and `CHEAPER_INFERENCE_API_KEY`. Ollama
+  and llama.cpp need no key; a custom OpenAI-compatible endpoint may require
+  `CUSTOM_API_KEY`.
 - Configuration defaults are in `config.py`. Add values such as
   `OLLAMA_BASE_URL` to `.env` when your setup needs an override.
 - Keys are read at startup. Restart Robin after editing `.env`.

@@ -97,6 +97,7 @@ class RobinConfig:
 	openrouter_base_url: Optional[str] = DEFAULT_OPENROUTER_BASE_URL
 	openrouter_api_key: Optional[str] = None
 	mistral_api_key: Optional[str] = None
+	cheaperinference_api_key: Optional[str] = None
 	ollama_num_ctx: int = DEFAULT_OLLAMA_NUM_CTX
 	llama_cpp_base_url: Optional[str] = None
 	custom_api_base_url: Optional[str] = None
@@ -140,6 +141,7 @@ class RobinConfig:
 				"OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL, env=env),
 			openrouter_api_key=_clean_env("OPENROUTER_API_KEY", env=env),
 			mistral_api_key=_clean_env("MISTRAL_API_KEY", env=env),
+			cheaperinference_api_key=_clean_env("CHEAPER_INFERENCE_API_KEY", env=env),
 			ollama_num_ctx=_clean_int("OLLAMA_NUM_CTX", DEFAULT_OLLAMA_NUM_CTX, env=env),
 			llama_cpp_base_url=_clean_env("LLAMA_CPP_BASE_URL", env=env),
 			custom_api_base_url=_clean_env("CUSTOM_API_BASE_URL", env=env),
@@ -174,7 +176,8 @@ def redact_secrets(text, cfg: Optional[RobinConfig] = None) -> str:
 	cfg = cfg if cfg is not None else _env_config
 	out = str(text)
 	for value in (cfg.openai_api_key, cfg.anthropic_api_key, cfg.google_api_key,
-	              cfg.mistral_api_key, cfg.openrouter_api_key, cfg.custom_api_key):
+	              cfg.mistral_api_key, cfg.openrouter_api_key, cfg.cheaperinference_api_key,
+	              cfg.custom_api_key):
 		if value and len(value) >= 8:
 			out = out.replace(value, "***")
 	return out

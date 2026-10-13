@@ -165,6 +165,11 @@ def _provider_constructor(provider: str, model_name: str,
                 "constructor_params": dict(model_name=model_name,
                                            base_url=_openrouter_base(cfg),
                                            api_key=cfg.openrouter_api_key)}
+    if provider == "cheaperinference":
+        return {"class": ChatOpenAI,
+                "constructor_params": dict(model_name=model_name,
+                                           base_url=model_registry.CHEAPER_INFERENCE_API,
+                                           api_key=cfg.cheaperinference_api_key)}
     return None
 
 
