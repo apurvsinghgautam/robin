@@ -1,5 +1,6 @@
 import requests
 import random, re
+import threading
 from urllib.parse import urlparse, parse_qs, parse_qsl, urlencode, unquote, quote_plus
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -71,6 +72,16 @@ def get_tor_session():
     # do so. get_over_tor follows them itself, unread (see scrape.py).
     session.get_redirect_target = no_redirect_target
     return session
+
+
+_thread_local = threading.local()
+
+
+def _get_session():
+    """The calling worker's pooled Tor session, built on first use."""
+    if not hasattr(_thread_local, "tor_session"):
+        _thread_local.tor_session = get_tor_session()
+    return _thread_local.tor_session
 
 ONION_URL_RE = re.compile(r'https?://[a-z0-9.-]+\.onion[^\s"\'<>]*', re.IGNORECASE)
 
@@ -169,7 +180,7 @@ def fetch_search_results_detailed(endpoint, query):
     """
     url = endpoint.format(query=query)
     headers = {"User-Agent": random.choice(USER_AGENTS)}
-    session = get_tor_session()
+    session = _get_session()
 
     try:
         # Engines are onion services and nothing opts them into clearweb, so a

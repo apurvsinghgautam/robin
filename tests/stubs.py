@@ -102,7 +102,9 @@ def record_sessions(testcase, routes=None, default_response=None):
     the patch is reused, and mutes the scrape logger.
     """
     scrape._thread_local = threading.local()
+    search._thread_local = threading.local()
     testcase.addCleanup(setattr, scrape, "_thread_local", threading.local())
+    testcase.addCleanup(setattr, search, "_thread_local", threading.local())
     quiet_logger(testcase, "scrape")
     RecordingSession.reset(routes=routes, default_response=default_response)
     patcher = mock.patch("requests.Session", RecordingSession)
