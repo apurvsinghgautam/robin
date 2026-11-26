@@ -50,6 +50,14 @@ class SearchTestCase(unittest.TestCase):
         return search.get_search_results_detailed(self.QUERY, **kwargs)
 
 
+class SearchSessionsAreReused(unittest.TestCase):
+    def test_sequential_engine_calls_reuse_the_worker_session(self):
+        record_sessions(self, default_response=FakeResponse(body=engine_page([])))
+        for endpoint in search.DEFAULT_SEARCH_ENGINES[:3]:
+            search.fetch_search_results_detailed(endpoint, "acme")
+        self.assertEqual(len(RecordingSession.created), 1)
+
+
 class ResultsAreDedupedThenCappedPerHost(SearchTestCase):
     def test_each_host_keeps_only_its_first_three_results(self):
         self.serve(0, CATEGORY_PAGES[:2] + MANY_HOSTS[:1] + CATEGORY_PAGES[2:])
